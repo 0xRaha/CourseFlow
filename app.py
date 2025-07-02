@@ -23,15 +23,15 @@ def signup():
 
         try:
             if user_type == 'student':
-                user = Student(firstname, lastname, email, username, password)
+                user = Student(unique_id, firstname, lastname, email, username, password)
             elif user_type == 'teacher':
                 if not department:
                     flash('Department is required for professors.')
                     print("Signup failed: Department required for Professor.")
                     return render_template('signup.html')
-                user = Professor(firstname, lastname, email, username, password, department)
+                user = Professor(unique_id, firstname, lastname, email, username, password, department)
             else:
-                flash('نوع کاربر نامعتبر است.')
+                flash('User type is unvalid!')
                 print("Signup failed: Invalid user type.")
                 return render_template('signup.html')
 

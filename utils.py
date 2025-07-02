@@ -3,4 +3,4 @@ def generate_password(password: str) -> str:
 
 
 def generate_userid() -> str:
-    return 26
+    return '26'
