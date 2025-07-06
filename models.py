@@ -1,7 +1,8 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
+import json
 
 class Database:
     def __init__(self, db_name='university.db'):
@@ -42,6 +43,7 @@ class Database:
                 year_level INTEGER DEFAULT 1,
                 major TEXT,
                 status TEXT DEFAULT 'active',
+                max_credits INTEGER DEFAULT 20,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
@@ -96,6 +98,8 @@ class Database:
                 prerequisites TEXT,
                 max_students INTEGER DEFAULT 30,
                 is_active BOOLEAN DEFAULT 1,
+                average_rating REAL DEFAULT 0.0,
+                total_ratings INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (department_id) REFERENCES departments (id)
             )
@@ -110,11 +114,13 @@ class Database:
                 section_number TEXT NOT NULL,
                 semester TEXT NOT NULL,
                 year INTEGER NOT NULL,
-                schedule TEXT,
+                schedule TEXT NOT NULL,
                 room TEXT,
                 max_capacity INTEGER DEFAULT 30,
                 current_enrollment INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'open',
+                grades_submitted BOOLEAN DEFAULT 0,
+                semester_ended BOOLEAN DEFAULT 0,
                 FOREIGN KEY (course_id) REFERENCES courses (id),
                 FOREIGN KEY (professor_id) REFERENCES professors (user_id),
                 UNIQUE(course_id, section_number, semester, year)
@@ -131,72 +137,40 @@ class Database:
                 status TEXT DEFAULT 'enrolled',
                 grade TEXT,
                 grade_points REAL,
+                can_disenroll BOOLEAN DEFAULT 1,
                 FOREIGN KEY (student_id) REFERENCES students (user_id),
                 FOREIGN KEY (section_id) REFERENCES course_sections (id),
                 UNIQUE(student_id, section_id)
             )
         ''')
         
-        # Assignments table
+        # Course ratings table
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS assignments (
-                id TEXT PRIMARY KEY,
-                section_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT,
-                due_date DATETIME,
-                max_points REAL DEFAULT 100.0,
-                assignment_type TEXT DEFAULT 'homework',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (section_id) REFERENCES course_sections (id)
-            )
-        ''')
-        
-        # Submissions table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS submissions (
-                id TEXT PRIMARY KEY,
-                assignment_id TEXT NOT NULL,
-                student_id TEXT NOT NULL,
-                submission_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                file_path TEXT,
-                comments TEXT,
-                score REAL,
-                feedback TEXT,
-                status TEXT DEFAULT 'submitted',
-                FOREIGN KEY (assignment_id) REFERENCES assignments (id),
-                FOREIGN KEY (student_id) REFERENCES students (user_id),
-                UNIQUE(assignment_id, student_id)
-            )
-        ''')
-        
-        # Announcements table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS announcements (
-                id TEXT PRIMARY KEY,
-                section_id TEXT,
-                author_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_urgent BOOLEAN DEFAULT 0,
-                FOREIGN KEY (section_id) REFERENCES course_sections (id),
-                FOREIGN KEY (author_id) REFERENCES users (id)
-            )
-        ''')
-        
-        # Attendance table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS attendance (
+            CREATE TABLE IF NOT EXISTS course_ratings (
                 id TEXT PRIMARY KEY,
                 student_id TEXT NOT NULL,
-                section_id TEXT NOT NULL,
-                date DATE NOT NULL,
-                status TEXT DEFAULT 'present',
-                notes TEXT,
+                course_id TEXT NOT NULL,
+                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                review TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (student_id) REFERENCES students (user_id),
-                FOREIGN KEY (section_id) REFERENCES course_sections (id),
-                UNIQUE(student_id, section_id, date)
+                FOREIGN KEY (course_id) REFERENCES courses (id),
+                UNIQUE(student_id, course_id)
+            )
+        ''')
+        
+        # Academic calendar table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS academic_calendar (
+                id TEXT PRIMARY KEY,
+                semester TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                enrollment_start DATE,
+                enrollment_end DATE,
+                is_current BOOLEAN DEFAULT 0,
+                UNIQUE(semester, year)
             )
         ''')
         
@@ -264,6 +238,7 @@ class Student(User):
         self.year_level = 1
         self.major = major
         self.status = 'active'
+        self.max_credits = 20  # Default for first year
     
     def generate_student_id(self):
         return f"STU{datetime.now().year}{str(uuid.uuid4())[:8].upper()}"
@@ -276,22 +251,87 @@ class Student(User):
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO students (user_id, student_id, enrollment_date, gpa, year_level, major, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (self.id, self.student_id, self.enrollment_date, self.gpa, self.year_level, self.major, self.status))
+            INSERT INTO students (user_id, student_id, enrollment_date, gpa, year_level, major, status, max_credits)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (self.id, self.student_id, self.enrollment_date, self.gpa, self.year_level, self.major, self.status, self.max_credits))
         
         conn.commit()
         conn.close()
+    
+    def calculate_max_credits(self):
+        """Calculate max credits based on year level and GPA"""
+        if self.year_level == 1:
+            return 20
+        elif self.gpa == 0.0:
+            return 14
+        elif self.gpa >= 3.0:
+            return 24
+        else:
+            return 20
+    
+    def get_current_credits(self, semester, year):
+        """Get total credits for current semester"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT SUM(c.credits)
+            FROM enrollments e
+            JOIN course_sections cs ON e.section_id = cs.id
+            JOIN courses c ON cs.course_id = c.id
+            WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ? AND e.status = 'enrolled'
+        ''', (self.id, semester, year))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result[0] if result[0] else 0
+    
+    def check_prerequisites(self, course_id):
+        """Check if student has completed prerequisites for a course"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get course prerequisites
+        cursor.execute('SELECT prerequisites FROM courses WHERE id = ?', (course_id,))
+        prereq_result = cursor.fetchone()
+        
+        if not prereq_result or not prereq_result[0]:
+            conn.close()
+            return True
+        
+        prerequisites = json.loads(prereq_result[0]) if prereq_result[0] else []
+        
+        # Check if student has completed all prerequisites with passing grade
+        for prereq_code in prerequisites:
+            cursor.execute('''
+                SELECT e.grade_points
+                FROM enrollments e
+                JOIN course_sections cs ON e.section_id = cs.id
+                JOIN courses c ON cs.course_id = c.id
+                WHERE e.student_id = ? AND c.course_code = ? AND e.grade_points >= 2.0
+            ''', (self.id, prereq_code))
+            
+            if not cursor.fetchone():
+                conn.close()
+                return False
+        
+        conn.close()
+        return True
     
     def enroll_in_section(self, section_id):
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Check if section exists and has capacity
+        # Get section and course info
         cursor.execute('''
-            SELECT current_enrollment, max_capacity, status 
-            FROM course_sections WHERE id = ?
+            SELECT cs.current_enrollment, cs.max_capacity, cs.status, cs.semester, cs.year, c.credits, c.id
+            FROM course_sections cs
+            JOIN courses c ON cs.course_id = c.id
+            WHERE cs.id = ?
         ''', (section_id,))
         section = cursor.fetchone()
         
@@ -310,12 +350,23 @@ class Student(User):
         if cursor.fetchone():
             raise ValueError("Already enrolled in this section")
         
+        # Check prerequisites
+        if not self.check_prerequisites(section[6]):
+            raise ValueError("Prerequisites not met")
+        
+        # Check credit limit
+        current_credits = self.get_current_credits(section[3], section[4])
+        max_credits = self.calculate_max_credits()
+        
+        if current_credits + section[5] > max_credits:
+            raise ValueError(f"Enrollment would exceed max credits ({max_credits})")
+        
         # Enroll student
         enrollment_id = str(uuid.uuid4())
         cursor.execute('''
-            INSERT INTO enrollments (id, student_id, section_id, enrollment_date, status)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (enrollment_id, self.id, section_id, datetime.now().date(), 'enrolled'))
+            INSERT INTO enrollments (id, student_id, section_id, enrollment_date, status, can_disenroll)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (enrollment_id, self.id, section_id, datetime.now().date(), 'enrolled', True))
         
         # Update section enrollment count
         cursor.execute('''
@@ -327,25 +378,99 @@ class Student(User):
         conn.commit()
         conn.close()
     
-    def get_enrolled_sections(self):
+    def disenroll_from_section(self, section_id):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if can disenroll (no grades submitted)
+        cursor.execute('''
+            SELECT can_disenroll FROM enrollments 
+            WHERE student_id = ? AND section_id = ? AND status = 'enrolled'
+        ''', (self.id, section_id))
+        
+        enrollment = cursor.fetchone()
+        if not enrollment:
+            raise ValueError("Not enrolled in this section")
+        
+        if not enrollment[0]:
+            raise ValueError("Cannot disenroll - grades have been submitted")
+        
+        # Remove enrollment
+        cursor.execute('''
+            DELETE FROM enrollments WHERE student_id = ? AND section_id = ?
+        ''', (self.id, section_id))
+        
+        # Update section enrollment count
+        cursor.execute('''
+            UPDATE course_sections 
+            SET current_enrollment = current_enrollment - 1 
+            WHERE id = ?
+        ''', (section_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_class_schedule(self, semester, year):
+        """Get student's class schedule for a semester"""
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT cs.*, c.title, c.course_code, c.credits,
-                   u.first_name, u.last_name, e.grade, e.status
+            SELECT c.course_code, c.title, c.credits, cs.section_number, 
+                   cs.schedule, cs.room, u.first_name, u.last_name, e.grade
             FROM enrollments e
             JOIN course_sections cs ON e.section_id = cs.id
             JOIN courses c ON cs.course_id = c.id
             JOIN professors p ON cs.professor_id = p.user_id
             JOIN users u ON p.user_id = u.id
-            WHERE e.student_id = ? AND e.status = 'enrolled'
-        ''', (self.id,))
+            WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ? AND e.status = 'enrolled'
+            ORDER BY c.course_code
+        ''', (self.id, semester, year))
         
-        sections = cursor.fetchall()
+        schedule = cursor.fetchall()
         conn.close()
-        return sections
+        return schedule
+    
+    def rate_course(self, course_id, rating, review=None):
+        """Rate a course (1-5 stars)"""
+        if rating < 1 or rating > 5:
+            raise ValueError("Rating must be between 1 and 5")
+        
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if student has taken this course
+        cursor.execute('''
+            SELECT COUNT(*) FROM enrollments e
+            JOIN course_sections cs ON e.section_id = cs.id
+            WHERE e.student_id = ? AND cs.course_id = ? AND e.grade_points IS NOT NULL
+        ''', (self.id, course_id))
+        
+        if cursor.fetchone()[0] == 0:
+            raise ValueError("Can only rate courses you have completed")
+        
+        # Insert or update rating
+        cursor.execute('''
+            INSERT OR REPLACE INTO course_ratings (id, student_id, course_id, rating, review)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (str(uuid.uuid4()), self.id, course_id, rating, review))
+        
+        # Update course average rating
+        cursor.execute('''
+            SELECT AVG(rating), COUNT(*) FROM course_ratings WHERE course_id = ?
+        ''', (course_id,))
+        
+        avg_rating, total_ratings = cursor.fetchone()
+        
+        cursor.execute('''
+            UPDATE courses SET average_rating = ?, total_ratings = ? WHERE id = ?
+        ''', (avg_rating, total_ratings, course_id))
+        
+        conn.commit()
+        conn.close()
 
 class Professor(User):
     def __init__(self, first_name, last_name, email, username, password, department, 
@@ -380,7 +505,7 @@ class Professor(User):
         conn.close()
     
     def create_course_section(self, course_id, section_number, semester, year, 
-                            schedule=None, room=None, max_capacity=30):
+                            schedule, room=None, max_capacity=30):
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -397,6 +522,40 @@ class Professor(User):
         conn.close()
         return section_id
     
+    def submit_grades(self, section_id, student_grades):
+        """Submit grades for students in a section"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if semester has ended
+        cursor.execute('''
+            SELECT semester_ended FROM course_sections WHERE id = ?
+        ''', (section_id,))
+        
+        section = cursor.fetchone()
+        if section and section[0]:
+            raise ValueError("Cannot submit grades - semester has ended")
+        
+        # Submit grades
+        for student_id, grade_data in student_grades.items():
+            grade_letter = grade_data['grade']
+            grade_points = grade_data['points']
+            
+            cursor.execute('''
+                UPDATE enrollments 
+                SET grade = ?, grade_points = ?, can_disenroll = 0
+                WHERE student_id = ? AND section_id = ?
+            ''', (grade_letter, grade_points, student_id, section_id))
+        
+        # Mark grades as submitted
+        cursor.execute('''
+            UPDATE course_sections SET grades_submitted = 1 WHERE id = ?
+        ''', (section_id,))
+        
+        conn.commit()
+        conn.close()
+    
     def get_teaching_sections(self):
         db = Database()
         conn = db.get_connection()
@@ -407,29 +566,12 @@ class Professor(User):
             FROM course_sections cs
             JOIN courses c ON cs.course_id = c.id
             WHERE cs.professor_id = ?
+            ORDER BY cs.year DESC, cs.semester DESC
         ''', (self.id,))
         
         sections = cursor.fetchall()
         conn.close()
         return sections
-    
-    def get_section_students(self, section_id):
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT u.first_name, u.last_name, u.email, s.student_id, 
-                   e.enrollment_date, e.grade, e.status
-            FROM enrollments e
-            JOIN students s ON e.student_id = s.user_id
-            JOIN users u ON s.user_id = u.id
-            WHERE e.section_id = ?
-        ''', (section_id,))
-        
-        students = cursor.fetchall()
-        conn.close()
-        return students
 
 class Admin(User):
     def __init__(self, first_name, last_name, email, username, password, admin_level=1):
@@ -452,6 +594,54 @@ class Admin(User):
         conn.commit()
         conn.close()
     
+    def change_student_grade(self, student_id, section_id, new_grade, new_points):
+        """Admin can change grades even after semester ends"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE enrollments 
+            SET grade = ?, grade_points = ?
+            WHERE student_id = ? AND section_id = ?
+        ''', (new_grade, new_points, student_id, section_id))
+        
+        conn.commit()
+        conn.close()
+    
+    def end_semester(self, semester, year):
+        """Mark semester as ended"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE course_sections 
+            SET semester_ended = 1
+            WHERE semester = ? AND year = ?
+        ''', (semester, year))
+        
+        conn.commit()
+        conn.close()
+    
+    def create_academic_calendar(self, semester, year, start_date, end_date, 
+                               enrollment_start, enrollment_end):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        calendar_id = str(uuid.uuid4())
+        cursor.execute('''
+            INSERT INTO academic_calendar (id, semester, year, start_date, end_date, 
+                                         enrollment_start, enrollment_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (calendar_id, semester, year, start_date, end_date, 
+              enrollment_start, enrollment_end))
+        
+        conn.commit()
+        conn.close()
+        return calendar_id
+    
     def create_course(self, course_code, title, description, credits, department_id, 
                      prerequisites=None, max_students=30):
         db = Database()
@@ -459,91 +649,18 @@ class Admin(User):
         cursor = conn.cursor()
         
         course_id = str(uuid.uuid4())
+        prerequisites_json = json.dumps(prerequisites) if prerequisites else None
+        
         cursor.execute('''
             INSERT INTO courses (id, course_code, title, description, credits, 
                                department_id, prerequisites, max_students)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (course_id, course_code, title, description, credits, 
-              department_id, prerequisites, max_students))
+              department_id, prerequisites_json, max_students))
         
         conn.commit()
         conn.close()
         return course_id
-    
-    def create_department(self, name, code, description=None, head_professor_id=None):
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        dept_id = str(uuid.uuid4())
-        cursor.execute('''
-            INSERT INTO departments (id, name, code, description, head_professor_id)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (dept_id, name, code, description, head_professor_id))
-        
-        conn.commit()
-        conn.close()
-        return dept_id
-    
-    def get_all_users(self, user_type=None):
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        if user_type:
-            cursor.execute('SELECT * FROM users WHERE user_type = ?', (user_type,))
-        else:
-            cursor.execute('SELECT * FROM users')
-        
-        users = cursor.fetchall()
-        conn.close()
-        return users
-    
-    def deactivate_user(self, user_id):
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('UPDATE users SET is_active = 0 WHERE id = ?', (user_id,))
-        conn.commit()
-        conn.close()
-
-class Course:
-    @staticmethod
-    def get_all_active():
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT c.*, d.name as department_name 
-            FROM courses c
-            LEFT JOIN departments d ON c.department_id = d.id
-            WHERE c.is_active = 1
-        ''')
-        
-        courses = cursor.fetchall()
-        conn.close()
-        return courses
-    
-    @staticmethod
-    def get_available_sections(course_id, semester, year):
-        db = Database()
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT cs.*, u.first_name, u.last_name, p.department
-            FROM course_sections cs
-            JOIN professors p ON cs.professor_id = p.user_id
-            JOIN users u ON p.user_id = u.id
-            WHERE cs.course_id = ? AND cs.semester = ? AND cs.year = ? 
-            AND cs.status = 'open' AND cs.current_enrollment < cs.max_capacity
-        ''', (course_id, semester, year))
-        
-        sections = cursor.fetchall()
-        conn.close()
-        return sections
 
 class Utils:
     @staticmethod
@@ -572,19 +689,50 @@ class Utils:
         return round(total_points / total_credits, 2) if total_credits > 0 else 0.0
     
     @staticmethod
-    def get_semester_schedule(user_id, semester, year):
+    def get_current_semester():
+        """Get current semester based on date"""
+        today = date.today()
+        year = today.year
+        month = today.month
+        
+        # Fall semester: August to December
+        if month >= 8:
+            return f"{year}1", year
+        # Spring semester: January to May
+        elif month <= 5:
+            return f"{year}2", year
+        # Summer break
+        else:
+            return f"{year}1", year  # Default to fall
+    
+    @staticmethod
+    def parse_semester(semester_code):
+        """Parse semester code like '20261' to year and semester"""
+        year = int(semester_code[:4])
+        semester_num = int(semester_code[4:])
+        semester_name = "Fall" if semester_num == 1 else "Spring"
+        return year, semester_name
+    
+    @staticmethod
+    def get_semester_timeline(student_id):
+        """Get student's complete academic timeline"""
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT c.course_code, c.title, cs.section_number, cs.schedule, cs.room
+            SELECT DISTINCT cs.semester, cs.year, 
+                   COUNT(e.id) as course_count,
+                   SUM(c.credits) as total_credits,
+                   AVG(e.grade_points) as semester_gpa
             FROM enrollments e
             JOIN course_sections cs ON e.section_id = cs.id
             JOIN courses c ON cs.course_id = c.id
-            WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ?
-        ''', (user_id, semester, year))
+            WHERE e.student_id = ? AND e.status = 'enrolled'
+            GROUP BY cs.semester, cs.year
+            ORDER BY cs.year, cs.semester
+        ''', (student_id,))
         
-        schedule = cursor.fetchall()
+        timeline = cursor.fetchall()
         conn.close()
-        return schedule
+        return timeline
