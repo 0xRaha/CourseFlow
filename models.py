@@ -545,7 +545,6 @@ class Course:
         conn.close()
         return sections
 
-# Utility functions for the system
 class Utils:
     @staticmethod
     def calculate_gpa(student_id):
