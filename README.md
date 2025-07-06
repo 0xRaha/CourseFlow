@@ -23,9 +23,7 @@ CourseFlow is a comprehensive university administration system designed to strea
 ### 👨‍🏫 For Professors
 - Create and manage course sections
 - Track student enrollments and performance
-- Manage assignments and grading
-- Post course announcements
-- Monitor class attendance
+- Manage grading
 
 ### 🔧 For Administrators
 - Manage users (students, professors, admins)
@@ -45,9 +43,8 @@ CourseFlow uses a comprehensive SQLite3 database with the following core entitie
 - **Courses**: Course catalog and descriptions
 - **Course Sections**: Specific course offerings per semester
 - **Enrollments**: Student-course relationships
-- **Assignments & Submissions**: Assignment management system
-- **Announcements**: Communication platform
-- **Attendance**: Class attendance tracking
+- **Course Ratings**
+- **Academic Calendar**
 
 ### Key Models
 ```python
@@ -186,9 +183,9 @@ uuid==1.30
 
 ## 📊 Project Stats
 
-- **Lines of Code**: ~500+
+- **Lines of Code**: ~700+
 - **Database Tables**: 10+
-- **Model Classes**: 8
+- **Model Classes**: 7
 - **Estimated Development Time**: 6-7 weeks
 - **Target Users**: Students, Professors, Administrators
 
