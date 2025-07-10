@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Courses - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📚 Manage Courses</h2>
+    <p class="text-muted">View and manage all courses in the system</p>
+    <a href="{{ url_for('create_course') }}" class="btn btn-primary">
+        ➕ Create New Course
+    </a>
+</div>
+
+<div class="card">
+    <h3>Course List</h3>
+    {% if courses %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Course Code</th>
+                        <th>Title</th>
+                        <th>Credits</th>
+                        <th>Department</th>
+                        <th>Max Students</th>
+                        <th>Rating</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for course in courses %}
+                    <tr>
+                        <td><strong>{{ course.course_code }}</strong></td>
+                        <td>{{ course.title }}</td>
+                        <td>{{ course.credits }}</td>
+                        <td>{{ course.department_name or 'N/A' }}</td>
+                        <td>{{ course.max_students }}</td>
+                        <td>
+                            {% if course.average_rating %}
+                                <span class="text-success">
+                                    ⭐ {{ "%.1f"|format(course.average_rating) }}
+                                    ({{ course.total_ratings }} reviews)
+                                </span>
+                            {% else %}
+                                <span class="text-muted">No ratings yet</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if course.is_active %}
+                                <span class="text-success">✓ Active</span>
+                            {% else %}
+                                <span class="text-danger">✗ Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="#" class="btn btn-secondary" style="font-size: 0.8rem;">
+                                ✏️ Edit
+                            </a>
+                            <a href="#" class="btn btn-danger" style="font-size: 0.8rem;">
+                                🗑️ Delete
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="text-center">
+            <p class="text-muted">No courses found. Create your first course!</p>
+            <a href="{{ url_for('create_course') }}" class="btn btn-primary">
+                ➕ Create Course
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Course Statistics</h3>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number">{{ courses|length }}</div>
+            <div class="stat-label">Total Courses</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ courses|selectattr('is_active')|list|length }}</div>
+            <div class="stat-label">Active Courses</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ courses|selectattr('average_rating')|list|length }}</div>
+            <div class="stat-label">Rated Courses</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ (courses|map(attribute='average_rating')|select|sum / courses|selectattr('average_rating')|list|length)|round(1) if courses|selectattr('average_rating')|list|length > 0 else 0 }}</div>
+            <div class="stat-label">Average Rating</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

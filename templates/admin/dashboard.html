@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>👨‍💼 Admin Dashboard</h2>
+    <p class="text-muted">Welcome to the University Management System</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ student_count }}</div>
+        <div class="stat-label">Total Students</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ professor_count }}</div>
+        <div class="stat-label">Total Professors</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ course_count }}</div>
+        <div class="stat-label">Total Courses</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ section_count }}</div>
+        <div class="stat-label">Course Sections</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>🔧 Admin Actions</h3>
+    <div class="mb-2">
+        <a href="{{ url_for('register_user') }}" class="btn btn-primary">
+            👥 Register New User
+        </a>
+        <a href="{{ url_for('manage_courses') }}" class="btn btn-primary">
+            📚 Manage Courses
+        </a>
+        <a href="{{ url_for('create_course') }}" class="btn btn-secondary">
+            ➕ Create New Course
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <h3>📊 Quick Stats</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Count</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Active Students</td>
+                    <td>{{ student_count }}</td>
+                    <td><span class="text-success">✓ Active</span></td>
+                </tr>
+                <tr>
+                    <td>Faculty Members</td>
+                    <td>{{ professor_count }}</td>
+                    <td><span class="text-success">✓ Active</span></td>
+                </tr>
+                <tr>
+                    <td>Available Courses</td>
+                    <td>{{ course_count }}</td>
+                    <td><span class="text-success">✓ Active</span></td>
+                </tr>
+                <tr>
+                    <td>Course Sections</td>
+                    <td>{{ section_count }}</td>
+                    <td><span class="text-success">✓ Active</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
