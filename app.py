@@ -1,9 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from werkzeug.security import check_password_hash, generate_password_hash
 from models import Database, User, Student, Professor, Admin, Utils
-import json
-from datetime import datetime, date
-import uuid
+from datetime import date
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
@@ -70,30 +67,9 @@ def admin_dashboard():
     if 'user_id' not in session or session['user_type'] != 'admin':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    stats = Admin.get_statistics()
     
-    # Get statistics
-    cursor.execute("SELECT COUNT(*) FROM users WHERE user_type = 'student'")
-    student_count = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM users WHERE user_type = 'professor'")
-    professor_count = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM courses")
-    course_count = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM course_sections")
-    section_count = cursor.fetchone()[0]
-    
-    conn.close()
-    
-    return render_template('admin/dashboard.html',
-                         student_count=student_count,
-                         professor_count=professor_count,
-                         course_count=course_count,
-                         section_count=section_count)
+    return render_template('admin/dashboard.html', **stats)
 
 @app.route('/admin/register_user', methods=['GET', 'POST'])
 def register_user():
@@ -138,19 +114,7 @@ def manage_courses():
     if 'user_id' not in session or session['user_type'] != 'admin':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT c.*, d.name as department_name
-        FROM courses c
-        LEFT JOIN departments d ON c.department_id = d.id
-        ORDER BY c.course_code
-    ''')
-    courses = cursor.fetchall()
-    
-    conn.close()
+    courses = Admin.get_all_courses()
     return render_template('admin/manage_courses.html', courses=courses)
 
 @app.route('/admin/create_course', methods=['GET', 'POST'])
@@ -177,39 +141,66 @@ def create_course():
         except Exception as e:
             flash(f'Error: {str(e)}', 'error')
     
-    return render_template('create_course.html')
+    return render_template('admin/create_course.html')
+
+@app.route('/admin/manage_students')
+def manage_students():
+    if 'user_id' not in session or session['user_type'] != 'admin':
+        return redirect(url_for('login'))
+    
+    students = User.get_all_users('student')
+    sections = Admin.get_all_sections()
+    
+    return render_template('admin/manage_students.html', students=students, sections=sections)
+
+@app.route('/admin/edit_enrollment', methods=['POST'])
+def edit_enrollment():
+    if 'user_id' not in session or session['user_type'] != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        student_id = data.get('student_id')
+        section_id = data.get('section_id')
+        
+        admin = Admin('', '', '', '', '', 3)
+        admin.id = session['user_id']
+        
+        if action == 'add':
+            grade = data.get('grade', 'IP')  # In Progress
+            grade_points = Utils.grade_to_points(grade)
+            admin.add_past_enrollment(student_id, section_id, grade, grade_points)
+            return jsonify({'success': True, 'message': 'Enrollment added successfully'})
+        
+        elif action == 'remove':
+            admin.remove_enrollment(student_id, section_id)
+            return jsonify({'success': True, 'message': 'Enrollment removed successfully'})
+        
+        elif action == 'change_grade':
+            grade = data.get('grade')
+            grade_points = Utils.grade_to_points(grade)
+            admin.change_student_grade(student_id, section_id, grade, grade_points)
+            return jsonify({'success': True, 'message': 'Grade updated successfully'})
+        
+        else:
+            return jsonify({'success': False, 'error': 'Invalid action'}), 400
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/professor/dashboard')
 def professor_dashboard():
     if 'user_id' not in session or session['user_type'] != 'professor':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    professor_info = Professor.get_by_user_id(session['user_id'])
     
-    # Get professor info
-    cursor.execute('''
-        SELECT u.*, p.employee_id, p.department, p.position, p.office_location, p.phone
-        FROM users u
-        JOIN professors p ON u.id = p.user_id
-        WHERE u.id = ?
-    ''', (session['user_id'],))
-    professor_info = cursor.fetchone()
+    professor = Professor('', '', '', '', '', '', '')
+    professor.id = session['user_id']
+    sections = professor.get_teaching_sections()
     
-    # Get teaching sections
-    cursor.execute('''
-        SELECT cs.*, c.title, c.course_code, c.credits, cs.current_enrollment, cs.max_capacity
-        FROM course_sections cs
-        JOIN courses c ON cs.course_id = c.id
-        WHERE cs.professor_id = ?
-        ORDER BY cs.year DESC, cs.semester DESC
-    ''', (session['user_id'],))
-    sections = cursor.fetchall()
-    
-    conn.close()
-    
-    return render_template('professor_dashboard.html', 
+    return render_template('professor/dashboard.html', 
                          professor=professor_info, 
                          sections=sections)
 
@@ -241,14 +232,10 @@ def create_section():
             flash(f'Error: {str(e)}', 'error')
     
     # Get available courses
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, course_code, title FROM courses WHERE is_active = 1')
-    courses = cursor.fetchall()
-    conn.close()
+    courses = Admin.get_all_courses()
+    current_year = date.today().year
     
-    return render_template('create_section.html', courses=courses)
+    return render_template('professor/create_section.html', courses=courses, current_year=current_year)
 
 @app.route('/professor/section/<section_id>')
 def view_section(section_id):
@@ -272,62 +259,76 @@ def view_section(section_id):
         flash('Section not found', 'error')
         return redirect(url_for('professor_dashboard'))
     
-    # Get enrolled students
-    cursor.execute('''
-        SELECT u.first_name, u.last_name, s.student_id, e.grade, e.grade_points, e.id as enrollment_id
-        FROM enrollments e
-        JOIN students s ON e.student_id = s.user_id
-        JOIN users u ON s.user_id = u.id
-        WHERE e.section_id = ?
-        ORDER BY u.last_name, u.first_name
-    ''', (section_id,))
-    students = cursor.fetchall()
-    
     conn.close()
     
-    return render_template('section_detail.html', section=section, students=students)
+    # Get enrolled students
+    professor = Professor('', '', '', '', '', '', '')
+    professor.id = session['user_id']
+    students = professor.get_section_students(section_id)
+    
+    return render_template('professor/section_detail.html', section=dict(section), students=students)
+
+@app.route('/professor/submit_grades/<section_id>', methods=['GET', 'POST'])
+def submit_grades(section_id):
+    if 'user_id' not in session or session['user_type'] != 'professor':
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        try:
+            professor = Professor('', '', '', '', '', '', '')
+            professor.id = session['user_id']
+            
+            student_grades = {}
+            for key, value in request.form.items():
+                if key.startswith('grade_'):
+                    student_id = key.replace('grade_', '')
+                    grade = value
+                    grade_points = Utils.grade_to_points(grade)
+                    student_grades[student_id] = {
+                        'grade': grade,
+                        'points': grade_points
+                    }
+            
+            professor.submit_grades(section_id, student_grades)
+            flash('Grades submitted successfully!', 'success')
+            return redirect(url_for('view_section', section_id=section_id))
+            
+        except Exception as e:
+            flash(f'Error: {str(e)}', 'error')
+    
+    return redirect(url_for('view_section', section_id=section_id))
+
+@app.route('/professor/profile')
+def professor_profile():
+    if 'user_id' not in session or session['user_type'] != 'professor':
+        return redirect(url_for('login'))
+    
+    professor_info = Professor.get_by_user_id(session['user_id'])
+    professor = Professor('', '', '', '', '', '', '')
+    professor.id = session['user_id']
+    sections = professor.get_teaching_sections()
+    
+    return render_template('professor/profile.html', professor=professor_info, sections=sections)
 
 @app.route('/student/dashboard')
 def student_dashboard():
     if 'user_id' not in session or session['user_type'] != 'student':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    
-    # Get student info
-    cursor.execute('''
-        SELECT u.*, s.student_id, s.gpa, s.year_level, s.major, s.status
-        FROM users u
-        JOIN students s ON u.id = s.user_id
-        WHERE u.id = ?
-    ''', (session['user_id'],))
-    student_info = cursor.fetchone()
+    student_info = Student.get_by_user_id(session['user_id'])
     
     # Get current semester
     current_semester, current_year = Utils.get_current_semester()
     
-    # Get current enrollments
-    cursor.execute('''
-        SELECT c.course_code, c.title, c.credits, cs.section_number, 
-               cs.schedule, cs.room, u.first_name, u.last_name, e.grade
-        FROM enrollments e
-        JOIN course_sections cs ON e.section_id = cs.id
-        JOIN courses c ON cs.course_id = c.id
-        JOIN professors p ON cs.professor_id = p.user_id
-        JOIN users u ON p.user_id = u.id
-        WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ? AND e.status = 'enrolled'
-        ORDER BY c.course_code
-    ''', (session['user_id'], 'Fall', current_year))
-    current_classes = cursor.fetchall()
+    # Get current classes
+    student = Student('', '', '', '', '', '')
+    student.id = session['user_id']
+    current_classes = student.get_class_schedule(current_semester, current_year)
     
     # Calculate GPA
     gpa = Utils.calculate_gpa(session['user_id'])
     
-    conn.close()
-    
-    return render_template('student_dashboard.html', 
+    return render_template('student/dashboard.html', 
                          student=student_info, 
                          current_classes=current_classes,
                          gpa=gpa)
@@ -337,30 +338,17 @@ def browse_courses():
     if 'user_id' not in session or session['user_type'] != 'student':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    sections = Utils.get_available_sections(session['user_id'])
     
-    # Get current semester
-    current_semester, current_year = Utils.get_current_semester()
+    # Check which sections the student is already enrolled in
+    enrolled_sections = []
+    for section in sections:
+        enrollment = Utils.get_student_enrollments(session['user_id'], section['id'])
+        section['is_enrolled'] = enrollment is not None
+        if enrollment:
+            enrolled_sections.append(section['id'])
     
-    # Get available course sections
-    cursor.execute('''
-        SELECT cs.id, c.course_code, c.title, c.description, c.credits, 
-               cs.section_number, cs.schedule, cs.room, cs.current_enrollment, 
-               cs.max_capacity, u.first_name, u.last_name, c.average_rating
-        FROM course_sections cs
-        JOIN courses c ON cs.course_id = c.id
-        JOIN professors p ON cs.professor_id = p.user_id
-        JOIN users u ON p.user_id = u.id
-        WHERE cs.status = 'open' AND cs.semester = ? AND cs.year = ?
-        ORDER BY c.course_code, cs.section_number
-    ''', ('Fall', current_year))
-    sections = cursor.fetchall()
-    
-    conn.close()
-    
-    return render_template('browse_courses.html', sections=sections)
+    return render_template('student/browse_courses.html', sections=sections)
 
 @app.route('/student/enroll/<section_id>')
 def enroll_in_course(section_id):
@@ -377,35 +365,44 @@ def enroll_in_course(section_id):
     
     return redirect(url_for('browse_courses'))
 
+@app.route('/student/drop/<section_id>')
+def drop_course(section_id):
+    if 'user_id' not in session or session['user_type'] != 'student':
+        return redirect(url_for('login'))
+    
+    try:
+        student = Student('', '', '', '', '', '')
+        student.id = session['user_id']
+        student.disenroll_from_section(section_id)
+        flash('Successfully dropped the course!', 'success')
+    except Exception as e:
+        flash(f'Drop failed: {str(e)}', 'error')
+    
+    return redirect(url_for('browse_courses'))
+
 @app.route('/student/grades')
 def view_grades():
     if 'user_id' not in session or session['user_type'] != 'student':
         return redirect(url_for('login'))
     
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    student = Student('', '', '', '', '', '')
+    student.id = session['user_id']
+    grades = student.get_all_grades()
     
-    # Get all enrollments with grades
-    cursor.execute('''
-        SELECT c.course_code, c.title, c.credits, cs.semester, cs.year, 
-               e.grade, e.grade_points, u.first_name, u.last_name
-        FROM enrollments e
-        JOIN course_sections cs ON e.section_id = cs.id
-        JOIN courses c ON cs.course_id = c.id
-        JOIN professors p ON cs.professor_id = p.user_id
-        JOIN users u ON p.user_id = u.id
-        WHERE e.student_id = ? AND e.status = 'enrolled'
-        ORDER BY cs.year DESC, cs.semester DESC, c.course_code
-    ''', (session['user_id'],))
-    grades = cursor.fetchall()
+    # Organize grades by semester
+    grades_by_semester = {}
+    for grade in grades:
+        key = f"{grade['semester']} {grade['year']}"
+        if key not in grades_by_semester:
+            grades_by_semester[key] = []
+        grades_by_semester[key].append(grade)
     
     # Calculate GPA
     gpa = Utils.calculate_gpa(session['user_id'])
     
-    conn.close()
-    
-    return render_template('student_grades.html', grades=grades, gpa=gpa)
+    return render_template('student/grades.html', 
+                         grades_by_semester=grades_by_semester, 
+                         gpa=gpa)
 
 @app.route('/student/schedule')
 def view_schedule():
@@ -417,9 +414,55 @@ def view_schedule():
     
     student = Student('', '', '', '', '', '')
     student.id = session['user_id']
-    schedule = student.get_class_schedule('Fall', current_year)
+    schedule = student.get_class_schedule(current_semester, current_year)
     
-    return render_template('student_schedule.html', schedule=schedule)
+    # Organize schedule by day
+    schedule_by_day = {
+        'M': [], 'T': [], 'W': [], 'R': [], 'F': []
+    }
+    
+    for course in schedule:
+        schedule_parts = course['schedule'].split(' ')
+        if len(schedule_parts) == 2:
+            days, time = schedule_parts
+            for day in days:
+                if day in schedule_by_day:
+                    schedule_by_day[day].append({
+                        'course': course,
+                        'time': time
+                    })
+    
+    # Sort each day by time
+    for day in schedule_by_day:
+        schedule_by_day[day].sort(key=lambda x: x['time'])
+    
+    return render_template('student/schedule.html', 
+                         schedule=schedule, 
+                         schedule_by_day=schedule_by_day,
+                         current_semester=current_semester,
+                         current_year=current_year)
+
+@app.route('/search/professors')
+def search_professors():
+    professors = User.get_all_users('professor')
+    return render_template('search_professors.html', professors=professors)
+
+@app.route('/professor/<professor_id>')
+def view_professor(professor_id):
+    professor_info = Professor.get_by_user_id(professor_id)
+    
+    if not professor_info:
+        flash('Professor not found', 'error')
+        return redirect(url_for('index'))
+    
+    professor = Professor('', '', '', '', '', '', '')
+    professor.id = professor_id
+    sections = professor.get_teaching_sections()
+    
+    return render_template('professor/profile.html', 
+                         professor=professor_info, 
+                         sections=sections,
+                         is_public=True)
 
 if __name__ == '__main__':
     init_admin()
