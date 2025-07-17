@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Courses - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔍 Browse Available Courses</h2>
+    <p class="text-muted">Explore and enroll in courses for the current semester</p>
+</div>
+
+<div class="card">
+    {% if sections %}
+        <div class="course-grid">
+            {% for section in sections %}
+            <div class="course-card {% if section.is_enrolled %}enrolled{% endif %}">
+                <div class="course-header">
+                    <h4>{{ section.course_code }} - Section {{ section.section_number }}</h4>
+                    <span class="credits-badge">{{ section.credits }} credits</span>
+                </div>
+                
+                <h5>{{ section.title }}</h5>
+                <p class="course-description">{{ section.description|truncate(150) }}</p>
+                
+                <div class="course-info">
+                    <p><strong>👨‍🏫 Professor:</strong> {{ section.first_name }} {{ section.last_name }}
+                        <a href="{{ url_for('view_professor', professor_id=section.professor_id) }}" 
+                           style="font-size: 0.8rem; margin-left: 0.5rem;">View Profile</a>
+                    </p>
+                    <p><strong>⏰ Schedule:</strong> {{ section.schedule }}</p>
+                    <p><strong>📍 Room:</strong> {{ section.room or 'TBA' }}</p>
+                    <p><strong>👥 Enrollment:</strong> {{ section.current_enrollment }}/{{ section.max_capacity }}
+                        {% if section.current_enrollment >= section.max_capacity %}
+                            <span class="text-danger">(FULL)</span>
+                        {% endif %}
+                    </p>
+                    {% if section.average_rating %}
+                    <p><strong>⭐ Rating:</strong> {{ "%.1f"|format(section.average_rating) }}/5.0</p>
+                    {% endif %}
+                </div>
+                
+                <div class="course-actions">
+                    {% if section.is_enrolled %}
+                        <span class="enrolled-badge">✓ Enrolled</span>
+                        <a href="{{ url_for('drop_course', section_id=section.id) }}" 
+                           class="btn btn-danger" 
+                           onclick="return confirm('Are you sure you want to drop this course?')">
+                            Drop Course
+                        </a>
+                    {% elif section.current_enrollment >= section.max_capacity %}
+                        <span class="text-danger">Section Full</span>
+                    {% else %}
+                        <a href="{{ url_for('enroll_in_course', section_id=section.id) }}" 
+                           class="btn btn-primary">
+                            Enroll in this Section
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center">
+            <p class="text-muted">No courses available for enrollment at this time.</p>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+.course-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 2rem;
+}
+
+.course-card {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.course-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+}
+
+.course-card.enrolled {
+    border-color: #48bb78;
+    background: #f0fff4;
+}
+
+.course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.course-header h4 {
+    margin: 0;
+    color: #2d3748;
+}
+
+.credits-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.course-card h5 {
+    color: #4a5568;
+    margin-bottom: 0.75rem;
+}
+
+.course-description {
+    color: #718096;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.course-info p {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.course-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.enrolled-badge {
+    background: #48bb78;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: bold;
+}
+</style>
+{% endblock %}

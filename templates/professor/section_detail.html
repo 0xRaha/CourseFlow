@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Section Details - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📚 {{ section.course_code }} - Section {{ section.section_number }}</h2>
+    <h3>{{ section.title }}</h3>
+    <p class="text-muted">{{ section.semester }} {{ section.year }}</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ section.current_enrollment }}/{{ section.max_capacity }}</div>
+        <div class="stat-label">Enrollment</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ section.credits }}</div>
+        <div class="stat-label">Credits</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ section.schedule }}</div>
+        <div class="stat-label">Schedule</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ section.room or 'TBA' }}</div>
+        <div class="stat-label">Room</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>👥 Enrolled Students ({{ students|length }})</h3>
+    
+    {% if students %}
+        <form method="POST" action="{{ url_for('submit_grades', section_id=section.id) }}">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Student ID</th>
+                            <th>Name</th>
+                            <th>Current Grade</th>
+                            <th>Grade Points</th>
+                            {% if not section.grades_submitted %}
+                            <th>Assign Grade</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ student.student_id }}</td>
+                            <td>{{ student.last_name }}, {{ student.first_name }}</td>
+                            <td>
+                                {% if student.grade %}
+                                    <strong>{{ student.grade }}</strong>
+                                {% else %}
+                                    <span class="text-muted">Not graded</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if student.grade_points %}
+                                    {{ "%.2f"|format(student.grade_points) }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% if not section.grades_submitted %}
+                            <td>
+                                <select name="grade_{{ student.enrollment_id }}" class="grade-select">
+                                    <option value="">No Grade</option>
+                                    <option value="A+" {% if student.grade == 'A+' %}selected{% endif %}>A+</option>
+                                    <option value="A" {% if student.grade == 'A' %}selected{% endif %}>A</option>
+                                    <option value="A-" {% if student.grade == 'A-' %}selected{% endif %}>A-</option>
+                                    <option value="B+" {% if student.grade == 'B+' %}selected{% endif %}>B+</option>
+                                    <option value="B" {% if student.grade == 'B' %}selected{% endif %}>B</option>
+                                    <option value="B-" {% if student.grade == 'B-' %}selected{% endif %}>B-</option>
+                                    <option value="C+" {% if student.grade == 'C+' %}selected{% endif %}>C+</option>
+                                    <option value="C" {% if student.grade == 'C' %}selected{% endif %}>C</option>
+                                    <option value="C-" {% if student.grade == 'C-' %}selected{% endif %}>C-</option>
+                                    <option value="D+" {% if student.grade == 'D+' %}selected{% endif %}>D+</option>
+                                    <option value="D" {% if student.grade == 'D' %}selected{% endif %}>D</option>
+                                    <option value="D-" {% if student.grade == 'D-' %}selected{% endif %}>D-</option>
+                                    <option value="F" {% if student.grade == 'F' %}selected{% endif %}>F</option>
+                                </select>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if not section.grades_submitted %}
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary" 
+                        onclick="return confirm('Are you sure you want to submit these grades? This action cannot be undone.')">
+                    ✓ Submit Grades
+                </button>
+                <span class="text-muted" style="margin-left: 1rem;">
+                    ⚠️ Once submitted, grades cannot be changed without admin assistance
+                </span>
+            </div>
+            {% else %}
+            <div class="alert alert-info mt-3">
+                ✓ Grades have been submitted for this section
+            </div>
+            {% endif %}
+        </form>
+    {% else %}
+        <div class="text-center">
+            <p class="text-muted">No students enrolled in this section yet.</p>
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Grade Distribution</h3>
+    {% if students|selectattr('grade')|list|length > 0 %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Grade</th>
+                        <th>Count</th>
+                        <th>Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set grade_counts = {} %}
+                    {% for student in students if student.grade %}
+                        {% if student.grade in grade_counts %}
+                            {% set _ = grade_counts.update({student.grade: grade_counts[student.grade] + 1}) %}
+                        {% else %}
+                            {% set _ = grade_counts.update({student.grade: 1}) %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% for grade, count in grade_counts.items()|sort %}
+                    <tr>
+                        <td><strong>{{ grade }}</strong></td>
+                        <td>{{ count }}</td>
+                        <td>{{ "%.1f"|format((count / students|selectattr('grade')|list|length) * 100) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted text-center">No grades assigned yet.</p>
+    {% endif %}
+</div>
+
+<style>
+.grade-select {
+    padding: 0.4rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+</style>
+{% endblock %}

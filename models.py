@@ -1,16 +1,30 @@
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
+import os
 
 class Database:
-    def __init__(self, db_name='university.db'):
-        self.db_name = db_name
+    def __init__(self):
+        self.host = os.getenv('DB_HOST', 'localhost')
+        self.port = os.getenv('DB_PORT', '5432')
+        self.database = os.getenv('DB_NAME', 'university_db')
+        self.user = os.getenv('DB_USER', 'postgres')
+        self.password = os.getenv('DB_PASSWORD', 'password')
         self.init_db()
     
     def get_connection(self):
-        return sqlite3.connect(self.db_name)
+        conn = psycopg2.connect(
+            host=self.host,
+            port=self.port,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+            cursor_factory=RealDictCursor
+        )
+        return conn
     
     def init_db(self):
         conn = self.get_connection()
@@ -19,110 +33,101 @@ class Database:
         # Users table (base for all user types)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                user_type TEXT NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                first_name VARCHAR(100) NOT NULL,
+                last_name VARCHAR(100) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                user_type VARCHAR(20) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1
+                is_active BOOLEAN DEFAULT TRUE
             )
         ''')
         
         # Students table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS students (
-                user_id TEXT PRIMARY KEY,
-                student_id TEXT UNIQUE NOT NULL,
-                enrollment_date DATE,
+                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                student_id VARCHAR(50) UNIQUE NOT NULL,
+                enrollment_date DATE DEFAULT CURRENT_DATE,
                 graduation_date DATE,
-                gpa REAL DEFAULT 0.0,
+                gpa DECIMAL(3,2) DEFAULT 0.0,
                 year_level INTEGER DEFAULT 1,
-                major TEXT,
-                status TEXT DEFAULT 'active',
-                max_credits INTEGER DEFAULT 20,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                major VARCHAR(100),
+                status VARCHAR(20) DEFAULT 'active',
+                max_credits INTEGER DEFAULT 20
             )
         ''')
         
         # Professors table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS professors (
-                user_id TEXT PRIMARY KEY,
-                employee_id TEXT UNIQUE NOT NULL,
-                department TEXT NOT NULL,
-                position TEXT DEFAULT 'Assistant Professor',
-                hire_date DATE,
-                office_location TEXT,
-                phone TEXT,
-                research_interests TEXT,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                employee_id VARCHAR(50) UNIQUE NOT NULL,
+                department VARCHAR(100) NOT NULL,
+                position VARCHAR(100) DEFAULT 'Assistant Professor',
+                hire_date DATE DEFAULT CURRENT_DATE,
+                office_location VARCHAR(100),
+                phone VARCHAR(20),
+                research_interests TEXT
             )
         ''')
         
         # Admins table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS admins (
-                user_id TEXT PRIMARY KEY,
+                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 admin_level INTEGER DEFAULT 1,
-                permissions TEXT,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                permissions VARCHAR(50) DEFAULT 'limited'
             )
         ''')
         
         # Departments table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS departments (
-                id TEXT PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
-                code TEXT UNIQUE NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) UNIQUE NOT NULL,
+                code VARCHAR(10) UNIQUE NOT NULL,
                 description TEXT,
-                head_professor_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (head_professor_id) REFERENCES professors (user_id)
+                head_professor_id UUID REFERENCES professors(user_id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Courses table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS courses (
-                id TEXT PRIMARY KEY,
-                course_code TEXT UNIQUE NOT NULL,
-                title TEXT NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                course_code VARCHAR(20) UNIQUE NOT NULL,
+                title VARCHAR(200) NOT NULL,
                 description TEXT,
                 credits INTEGER NOT NULL,
-                department_id TEXT,
-                prerequisites TEXT,
+                department_id UUID REFERENCES departments(id),
+                prerequisites JSONB,
                 max_students INTEGER DEFAULT 30,
-                is_active BOOLEAN DEFAULT 1,
-                average_rating REAL DEFAULT 0.0,
-                total_ratings INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (department_id) REFERENCES departments (id)
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Course sections table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS course_sections (
-                id TEXT PRIMARY KEY,
-                course_id TEXT NOT NULL,
-                professor_id TEXT NOT NULL,
-                section_number TEXT NOT NULL,
-                semester TEXT NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                course_id UUID NOT NULL REFERENCES courses(id),
+                professor_id UUID NOT NULL REFERENCES professors(user_id),
+                section_number VARCHAR(10) NOT NULL,
+                semester VARCHAR(20) NOT NULL,
                 year INTEGER NOT NULL,
-                schedule TEXT NOT NULL,
-                room TEXT,
+                schedule VARCHAR(100) NOT NULL,
+                room VARCHAR(50),
                 max_capacity INTEGER DEFAULT 30,
                 current_enrollment INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'open',
-                grades_submitted BOOLEAN DEFAULT 0,
-                semester_ended BOOLEAN DEFAULT 0,
-                FOREIGN KEY (course_id) REFERENCES courses (id),
-                FOREIGN KEY (professor_id) REFERENCES professors (user_id),
+                status VARCHAR(20) DEFAULT 'open',
+                grades_submitted BOOLEAN DEFAULT FALSE,
+                semester_ended BOOLEAN DEFAULT FALSE,
                 UNIQUE(course_id, section_number, semester, year)
             )
         ''')
@@ -130,49 +135,39 @@ class Database:
         # Enrollments table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS enrollments (
-                id TEXT PRIMARY KEY,
-                student_id TEXT NOT NULL,
-                section_id TEXT NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                student_id UUID NOT NULL REFERENCES students(user_id),
+                section_id UUID NOT NULL REFERENCES course_sections(id),
                 enrollment_date DATE DEFAULT CURRENT_DATE,
-                status TEXT DEFAULT 'enrolled',
-                grade TEXT,
-                grade_points REAL,
-                can_disenroll BOOLEAN DEFAULT 1,
-                FOREIGN KEY (student_id) REFERENCES students (user_id),
-                FOREIGN KEY (section_id) REFERENCES course_sections (id),
+                status VARCHAR(20) DEFAULT 'enrolled',
+                grade VARCHAR(5),
+                grade_points DECIMAL(3,2),
+                can_disenroll BOOLEAN DEFAULT TRUE,
                 UNIQUE(student_id, section_id)
-            )
-        ''')
-        
-        # Course ratings table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS course_ratings (
-                id TEXT PRIMARY KEY,
-                student_id TEXT NOT NULL,
-                course_id TEXT NOT NULL,
-                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-                review TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (student_id) REFERENCES students (user_id),
-                FOREIGN KEY (course_id) REFERENCES courses (id),
-                UNIQUE(student_id, course_id)
             )
         ''')
         
         # Academic calendar table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS academic_calendar (
-                id TEXT PRIMARY KEY,
-                semester TEXT NOT NULL,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                semester VARCHAR(20) NOT NULL,
                 year INTEGER NOT NULL,
                 start_date DATE NOT NULL,
                 end_date DATE NOT NULL,
                 enrollment_start DATE,
                 enrollment_end DATE,
-                is_current BOOLEAN DEFAULT 0,
+                is_current BOOLEAN DEFAULT FALSE,
                 UNIQUE(semester, year)
             )
         ''')
+        
+        # Create indexes for better performance
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_enrollments_section ON enrollments(section_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_course_sections_semester ON course_sections(semester, year)')
         
         conn.commit()
         conn.close()
@@ -184,7 +179,7 @@ class User:
         self.last_name = last_name
         self.email = email
         self.username = username
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password) if password else None
         self.user_type = user_type
         self.created_at = datetime.now()
         self.is_active = True
@@ -196,7 +191,7 @@ class User:
         
         cursor.execute('''
             INSERT INTO users (id, first_name, last_name, email, username, password_hash, user_type, created_at, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (self.id, self.first_name, self.last_name, self.email, self.username, 
               self.password_hash, self.user_type, self.created_at, self.is_active))
         
@@ -209,12 +204,12 @@ class User:
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('SELECT id, password_hash, user_type FROM users WHERE username = ? AND is_active = 1', (username,))
+        cursor.execute('SELECT id, password_hash, user_type FROM users WHERE username = %s AND is_active = TRUE', (username,))
         user = cursor.fetchone()
         conn.close()
         
-        if user and check_password_hash(user[1], password):
-            return {'id': user[0], 'user_type': user[2]}
+        if user and check_password_hash(user['password_hash'], password):
+            return {'id': user['id'], 'user_type': user['user_type']}
         return None
     
     @staticmethod
@@ -223,11 +218,27 @@ class User:
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
         user = cursor.fetchone()
         conn.close()
         
-        return user
+        return dict(user) if user else None
+    
+    @staticmethod
+    def get_all_users(user_type=None):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        if user_type:
+            cursor.execute('SELECT * FROM users WHERE user_type = %s AND is_active = TRUE', (user_type,))
+        else:
+            cursor.execute('SELECT * FROM users WHERE is_active = TRUE')
+        
+        users = cursor.fetchall()
+        conn.close()
+        
+        return [dict(user) for user in users]
 
 class Student(User):
     def __init__(self, first_name, last_name, email, username, password, major=None):
@@ -252,11 +263,29 @@ class Student(User):
         
         cursor.execute('''
             INSERT INTO students (user_id, student_id, enrollment_date, gpa, year_level, major, status, max_credits)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (self.id, self.student_id, self.enrollment_date, self.gpa, self.year_level, self.major, self.status, self.max_credits))
         
         conn.commit()
         conn.close()
+    
+    @staticmethod
+    def get_by_user_id(user_id):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT u.*, s.student_id, s.gpa, s.year_level, s.major, s.status
+            FROM users u
+            JOIN students s ON u.id = s.user_id
+            WHERE u.id = %s
+        ''', (user_id,))
+        
+        student = cursor.fetchone()
+        conn.close()
+        
+        return dict(student) if student else None
     
     def calculate_max_credits(self):
         """Calculate max credits based on year level and GPA"""
@@ -276,17 +305,17 @@ class Student(User):
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT SUM(c.credits)
+            SELECT COALESCE(SUM(c.credits), 0) as total_credits
             FROM enrollments e
             JOIN course_sections cs ON e.section_id = cs.id
             JOIN courses c ON cs.course_id = c.id
-            WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ? AND e.status = 'enrolled'
+            WHERE e.student_id = %s AND cs.semester = %s AND cs.year = %s AND e.status = 'enrolled'
         ''', (self.id, semester, year))
         
         result = cursor.fetchone()
         conn.close()
         
-        return result[0] if result[0] else 0
+        return result['total_credits'] if result else 0
     
     def check_prerequisites(self, course_id):
         """Check if student has completed prerequisites for a course"""
@@ -295,14 +324,14 @@ class Student(User):
         cursor = conn.cursor()
         
         # Get course prerequisites
-        cursor.execute('SELECT prerequisites FROM courses WHERE id = ?', (course_id,))
+        cursor.execute('SELECT prerequisites FROM courses WHERE id = %s', (course_id,))
         prereq_result = cursor.fetchone()
         
-        if not prereq_result or not prereq_result[0]:
+        if not prereq_result or not prereq_result['prerequisites']:
             conn.close()
             return True
         
-        prerequisites = json.loads(prereq_result[0]) if prereq_result[0] else []
+        prerequisites = prereq_result['prerequisites'] if prereq_result['prerequisites'] else []
         
         # Check if student has completed all prerequisites with passing grade
         for prereq_code in prerequisites:
@@ -311,7 +340,7 @@ class Student(User):
                 FROM enrollments e
                 JOIN course_sections cs ON e.section_id = cs.id
                 JOIN courses c ON cs.course_id = c.id
-                WHERE e.student_id = ? AND c.course_code = ? AND e.grade_points >= 2.0
+                WHERE e.student_id = %s AND c.course_code = %s AND e.grade_points >= 2.0
             ''', (self.id, prereq_code))
             
             if not cursor.fetchone():
@@ -320,6 +349,77 @@ class Student(User):
         
         conn.close()
         return True
+    
+    def check_time_conflict(self, new_section_id):
+        """Check if there's a time conflict with existing enrolled courses"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get new section schedule
+        cursor.execute('''
+            SELECT schedule, semester, year FROM course_sections WHERE id = %s
+        ''', (new_section_id,))
+        new_section = cursor.fetchone()
+        
+        if not new_section:
+            conn.close()
+            return True  # No conflict if section doesn't exist
+        
+        # Get student's current enrollments for the same semester
+        cursor.execute('''
+            SELECT cs.schedule
+            FROM enrollments e
+            JOIN course_sections cs ON e.section_id = cs.id
+            WHERE e.student_id = %s AND cs.semester = %s AND cs.year = %s AND e.status = 'enrolled'
+        ''', (self.id, new_section['semester'], new_section['year']))
+        
+        current_schedules = cursor.fetchall()
+        conn.close()
+        
+        # Parse schedule format (e.g., "MWF 10:00-11:00")
+        new_schedule = new_section['schedule']
+        
+        for current in current_schedules:
+            if self._has_time_overlap(new_schedule, current['schedule']):
+                return True
+        
+        return False
+    
+    def _has_time_overlap(self, schedule1, schedule2):
+        """Check if two schedules overlap"""
+        # Simple implementation - you can make this more sophisticated
+        # Format: "MWF 10:00-11:00"
+        try:
+            days1, time1 = schedule1.split(' ')
+            days2, time2 = schedule2.split(' ')
+            
+            # Check if there are common days
+            common_days = any(day in days2 for day in days1)
+            
+            if common_days:
+                # Parse times
+                start1, end1 = time1.split('-')
+                start2, end2 = time2.split('-')
+                
+                # Convert to comparable format
+                start1_h, start1_m = map(int, start1.split(':'))
+                end1_h, end1_m = map(int, end1.split(':'))
+                start2_h, start2_m = map(int, start2.split(':'))
+                end2_h, end2_m = map(int, end2.split(':'))
+                
+                # Check overlap
+                start1_total = start1_h * 60 + start1_m
+                end1_total = end1_h * 60 + end1_m
+                start2_total = start2_h * 60 + start2_m
+                end2_total = end2_h * 60 + end2_m
+                
+                return not (end1_total <= start2_total or end2_total <= start1_total)
+        except:
+            # If parsing fails, assume no conflict
+            return False
+        
+        return False
     
     def enroll_in_section(self, section_id):
         db = Database()
@@ -331,48 +431,52 @@ class Student(User):
             SELECT cs.current_enrollment, cs.max_capacity, cs.status, cs.semester, cs.year, c.credits, c.id
             FROM course_sections cs
             JOIN courses c ON cs.course_id = c.id
-            WHERE cs.id = ?
+            WHERE cs.id = %s
         ''', (section_id,))
         section = cursor.fetchone()
         
         if not section:
             raise ValueError("Section not found")
         
-        if section[2] != 'open':
+        if section['status'] != 'open':
             raise ValueError("Section is not open for enrollment")
         
-        if section[0] >= section[1]:
+        if section['current_enrollment'] >= section['max_capacity']:
             raise ValueError("Section is full")
         
         # Check if already enrolled
-        cursor.execute('SELECT id FROM enrollments WHERE student_id = ? AND section_id = ?', 
+        cursor.execute('SELECT id FROM enrollments WHERE student_id = %s AND section_id = %s', 
                       (self.id, section_id))
         if cursor.fetchone():
             raise ValueError("Already enrolled in this section")
         
         # Check prerequisites
-        if not self.check_prerequisites(section[6]):
+        if not self.check_prerequisites(section['id']):
             raise ValueError("Prerequisites not met")
         
+        # Check time conflicts
+        if self.check_time_conflict(section_id):
+            raise ValueError("Time conflict with another enrolled course")
+        
         # Check credit limit
-        current_credits = self.get_current_credits(section[3], section[4])
+        current_credits = self.get_current_credits(section['semester'], section['year'])
         max_credits = self.calculate_max_credits()
         
-        if current_credits + section[5] > max_credits:
+        if current_credits + section['credits'] > max_credits:
             raise ValueError(f"Enrollment would exceed max credits ({max_credits})")
         
         # Enroll student
         enrollment_id = str(uuid.uuid4())
         cursor.execute('''
             INSERT INTO enrollments (id, student_id, section_id, enrollment_date, status, can_disenroll)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         ''', (enrollment_id, self.id, section_id, datetime.now().date(), 'enrolled', True))
         
         # Update section enrollment count
         cursor.execute('''
             UPDATE course_sections 
             SET current_enrollment = current_enrollment + 1 
-            WHERE id = ?
+            WHERE id = %s
         ''', (section_id,))
         
         conn.commit()
@@ -386,26 +490,26 @@ class Student(User):
         # Check if can disenroll (no grades submitted)
         cursor.execute('''
             SELECT can_disenroll FROM enrollments 
-            WHERE student_id = ? AND section_id = ? AND status = 'enrolled'
+            WHERE student_id = %s AND section_id = %s AND status = 'enrolled'
         ''', (self.id, section_id))
         
         enrollment = cursor.fetchone()
         if not enrollment:
             raise ValueError("Not enrolled in this section")
         
-        if not enrollment[0]:
+        if not enrollment['can_disenroll']:
             raise ValueError("Cannot disenroll - grades have been submitted")
         
         # Remove enrollment
         cursor.execute('''
-            DELETE FROM enrollments WHERE student_id = ? AND section_id = ?
+            DELETE FROM enrollments WHERE student_id = %s AND section_id = %s
         ''', (self.id, section_id))
         
         # Update section enrollment count
         cursor.execute('''
             UPDATE course_sections 
             SET current_enrollment = current_enrollment - 1 
-            WHERE id = ?
+            WHERE id = %s
         ''', (section_id,))
         
         conn.commit()
@@ -425,52 +529,35 @@ class Student(User):
             JOIN courses c ON cs.course_id = c.id
             JOIN professors p ON cs.professor_id = p.user_id
             JOIN users u ON p.user_id = u.id
-            WHERE e.student_id = ? AND cs.semester = ? AND cs.year = ? AND e.status = 'enrolled'
+            WHERE e.student_id = %s AND cs.semester = %s AND cs.year = %s AND e.status = 'enrolled'
             ORDER BY c.course_code
         ''', (self.id, semester, year))
         
         schedule = cursor.fetchall()
         conn.close()
-        return schedule
+        return [dict(row) for row in schedule]
     
-    def rate_course(self, course_id, rating, review=None):
-        """Rate a course (1-5 stars)"""
-        if rating < 1 or rating > 5:
-            raise ValueError("Rating must be between 1 and 5")
-        
+    def get_all_grades(self):
+        """Get all grades across all semesters"""
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Check if student has taken this course
         cursor.execute('''
-            SELECT COUNT(*) FROM enrollments e
+            SELECT c.course_code, c.title, c.credits, cs.semester, cs.year, 
+                   e.grade, e.grade_points, u.first_name, u.last_name
+            FROM enrollments e
             JOIN course_sections cs ON e.section_id = cs.id
-            WHERE e.student_id = ? AND cs.course_id = ? AND e.grade_points IS NOT NULL
-        ''', (self.id, course_id))
+            JOIN courses c ON cs.course_id = c.id
+            JOIN professors p ON cs.professor_id = p.user_id
+            JOIN users u ON p.user_id = u.id
+            WHERE e.student_id = %s AND e.status = 'enrolled'
+            ORDER BY cs.year DESC, cs.semester DESC, c.course_code
+        ''', (self.id,))
         
-        if cursor.fetchone()[0] == 0:
-            raise ValueError("Can only rate courses you have completed")
-        
-        # Insert or update rating
-        cursor.execute('''
-            INSERT OR REPLACE INTO course_ratings (id, student_id, course_id, rating, review)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (str(uuid.uuid4()), self.id, course_id, rating, review))
-        
-        # Update course average rating
-        cursor.execute('''
-            SELECT AVG(rating), COUNT(*) FROM course_ratings WHERE course_id = ?
-        ''', (course_id,))
-        
-        avg_rating, total_ratings = cursor.fetchone()
-        
-        cursor.execute('''
-            UPDATE courses SET average_rating = ?, total_ratings = ? WHERE id = ?
-        ''', (avg_rating, total_ratings, course_id))
-        
-        conn.commit()
+        grades = cursor.fetchall()
         conn.close()
+        return [dict(row) for row in grades]
 
 class Professor(User):
     def __init__(self, first_name, last_name, email, username, password, department, 
@@ -497,12 +584,30 @@ class Professor(User):
         cursor.execute('''
             INSERT INTO professors (user_id, employee_id, department, position, hire_date, 
                                   office_location, phone, research_interests)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (self.id, self.employee_id, self.department, self.position, self.hire_date,
               self.office_location, self.phone, self.research_interests))
         
         conn.commit()
         conn.close()
+    
+    @staticmethod
+    def get_by_user_id(user_id):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT u.*, p.employee_id, p.department, p.position, p.office_location, p.phone
+            FROM users u
+            JOIN professors p ON u.id = p.user_id
+            WHERE u.id = %s
+        ''', (user_id,))
+        
+        professor = cursor.fetchone()
+        conn.close()
+        
+        return dict(professor) if professor else None
     
     def create_course_section(self, course_id, section_number, semester, year, 
                             schedule, room=None, max_capacity=30):
@@ -514,7 +619,7 @@ class Professor(User):
         cursor.execute('''
             INSERT INTO course_sections (id, course_id, professor_id, section_number, 
                                        semester, year, schedule, room, max_capacity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (section_id, course_id, self.id, section_number, semester, year, 
               schedule, room, max_capacity))
         
@@ -530,11 +635,11 @@ class Professor(User):
         
         # Check if semester has ended
         cursor.execute('''
-            SELECT semester_ended FROM course_sections WHERE id = ?
+            SELECT semester_ended FROM course_sections WHERE id = %s
         ''', (section_id,))
         
         section = cursor.fetchone()
-        if section and section[0]:
+        if section and section['semester_ended']:
             raise ValueError("Cannot submit grades - semester has ended")
         
         # Submit grades
@@ -544,34 +649,62 @@ class Professor(User):
             
             cursor.execute('''
                 UPDATE enrollments 
-                SET grade = ?, grade_points = ?, can_disenroll = 0
-                WHERE student_id = ? AND section_id = ?
+                SET grade = %s, grade_points = %s, can_disenroll = FALSE
+                WHERE student_id = %s AND section_id = %s
             ''', (grade_letter, grade_points, student_id, section_id))
         
         # Mark grades as submitted
         cursor.execute('''
-            UPDATE course_sections SET grades_submitted = 1 WHERE id = ?
+            UPDATE course_sections SET grades_submitted = TRUE WHERE id = %s
         ''', (section_id,))
         
         conn.commit()
         conn.close()
     
-    def get_teaching_sections(self):
+    def get_teaching_sections(self, semester=None, year=None):
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        if semester and year:
+            cursor.execute('''
+                SELECT cs.*, c.title, c.course_code, c.credits, cs.current_enrollment, cs.max_capacity
+                FROM course_sections cs
+                JOIN courses c ON cs.course_id = c.id
+                WHERE cs.professor_id = %s AND cs.semester = %s AND cs.year = %s
+                ORDER BY c.course_code
+            ''', (self.id, semester, year))
+        else:
+            cursor.execute('''
+                SELECT cs.*, c.title, c.course_code, c.credits, cs.current_enrollment, cs.max_capacity
+                FROM course_sections cs
+                JOIN courses c ON cs.course_id = c.id
+                WHERE cs.professor_id = %s
+                ORDER BY cs.year DESC, cs.semester DESC, c.course_code
+            ''', (self.id,))
+        
+        sections = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in sections]
+    
+    def get_section_students(self, section_id):
+        """Get all students enrolled in a section"""
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT cs.*, c.title, c.course_code, c.credits
-            FROM course_sections cs
-            JOIN courses c ON cs.course_id = c.id
-            WHERE cs.professor_id = ?
-            ORDER BY cs.year DESC, cs.semester DESC
-        ''', (self.id,))
+            SELECT u.first_name, u.last_name, s.student_id, e.grade, e.grade_points, e.id as enrollment_id
+            FROM enrollments e
+            JOIN students s ON e.student_id = s.user_id
+            JOIN users u ON s.user_id = u.id
+            WHERE e.section_id = %s
+            ORDER BY u.last_name, u.first_name
+        ''', (section_id,))
         
-        sections = cursor.fetchall()
+        students = cursor.fetchall()
         conn.close()
-        return sections
+        return [dict(row) for row in students]
 
 class Admin(User):
     def __init__(self, first_name, last_name, email, username, password, admin_level=1):
@@ -588,11 +721,35 @@ class Admin(User):
         
         cursor.execute('''
             INSERT INTO admins (user_id, admin_level, permissions)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         ''', (self.id, self.admin_level, self.permissions))
         
         conn.commit()
         conn.close()
+    
+    @staticmethod
+    def get_statistics():
+        """Get system-wide statistics"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        stats = {}
+        
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE user_type = 'student'")
+        stats['student_count'] = cursor.fetchone()['count']
+        
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE user_type = 'professor'")
+        stats['professor_count'] = cursor.fetchone()['count']
+        
+        cursor.execute("SELECT COUNT(*) as count FROM courses")
+        stats['course_count'] = cursor.fetchone()['count']
+        
+        cursor.execute("SELECT COUNT(*) as count FROM course_sections")
+        stats['section_count'] = cursor.fetchone()['count']
+        
+        conn.close()
+        return stats
     
     def change_student_grade(self, student_id, section_id, new_grade, new_points):
         """Admin can change grades even after semester ends"""
@@ -602,9 +759,37 @@ class Admin(User):
         
         cursor.execute('''
             UPDATE enrollments 
-            SET grade = ?, grade_points = ?
-            WHERE student_id = ? AND section_id = ?
+            SET grade = %s, grade_points = %s
+            WHERE student_id = %s AND section_id = %s
         ''', (new_grade, new_points, student_id, section_id))
+        
+        conn.commit()
+        conn.close()
+    
+    def add_past_enrollment(self, student_id, section_id, grade, grade_points):
+        """Add a past semester enrollment for a student"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        enrollment_id = str(uuid.uuid4())
+        cursor.execute('''
+            INSERT INTO enrollments (id, student_id, section_id, enrollment_date, status, grade, grade_points, can_disenroll)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (enrollment_id, student_id, section_id, datetime.now().date(), 'enrolled', grade, grade_points, False))
+        
+        conn.commit()
+        conn.close()
+    
+    def remove_enrollment(self, student_id, section_id):
+        """Remove a student's enrollment"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            DELETE FROM enrollments WHERE student_id = %s AND section_id = %s
+        ''', (student_id, section_id))
         
         conn.commit()
         conn.close()
@@ -617,8 +802,8 @@ class Admin(User):
         
         cursor.execute('''
             UPDATE course_sections 
-            SET semester_ended = 1
-            WHERE semester = ? AND year = ?
+            SET semester_ended = TRUE
+            WHERE semester = %s AND year = %s
         ''', (semester, year))
         
         conn.commit()
@@ -634,7 +819,7 @@ class Admin(User):
         cursor.execute('''
             INSERT INTO academic_calendar (id, semester, year, start_date, end_date, 
                                          enrollment_start, enrollment_end)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (calendar_id, semester, year, start_date, end_date, 
               enrollment_start, enrollment_end))
         
@@ -654,13 +839,51 @@ class Admin(User):
         cursor.execute('''
             INSERT INTO courses (id, course_code, title, description, credits, 
                                department_id, prerequisites, max_students)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (course_id, course_code, title, description, credits, 
               department_id, prerequisites_json, max_students))
         
         conn.commit()
         conn.close()
         return course_id
+    
+    @staticmethod
+    def get_all_courses():
+        """Get all courses in the system"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT c.*, d.name as department_name
+            FROM courses c
+            LEFT JOIN departments d ON c.department_id = d.id
+            ORDER BY c.course_code
+        ''')
+        
+        courses = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in courses]
+    
+    @staticmethod
+    def get_all_sections():
+        """Get all course sections"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT cs.*, c.title, c.course_code, u.first_name, u.last_name
+            FROM course_sections cs
+            JOIN courses c ON cs.course_id = c.id
+            JOIN professors p ON cs.professor_id = p.user_id
+            JOIN users u ON p.user_id = u.id
+            ORDER BY cs.year DESC, cs.semester DESC, c.course_code
+        ''')
+        
+        sections = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in sections]
 
 class Utils:
     @staticmethod
@@ -674,7 +897,7 @@ class Utils:
             FROM enrollments e
             JOIN course_sections cs ON e.section_id = cs.id
             JOIN courses c ON cs.course_id = c.id
-            WHERE e.student_id = ? AND e.grade_points IS NOT NULL
+            WHERE e.student_id = %s AND e.grade_points IS NOT NULL
         ''', (student_id,))
         
         grades = cursor.fetchall()
@@ -683,8 +906,8 @@ class Utils:
         if not grades:
             return 0.0
         
-        total_points = sum(grade[0] * grade[1] for grade in grades)
-        total_credits = sum(grade[1] for grade in grades)
+        total_points = sum(float(grade['grade_points']) * grade['credits'] for grade in grades)
+        total_credits = sum(grade['credits'] for grade in grades)
         
         return round(total_points / total_credits, 2) if total_credits > 0 else 0.0
     
@@ -697,42 +920,65 @@ class Utils:
         
         # Fall semester: August to December
         if month >= 8:
-            return f"{year}1", year
+            return "Fall", year
         # Spring semester: January to May
         elif month <= 5:
-            return f"{year}2", year
-        # Summer break
+            return "Spring", year
+        # Summer semester: June to July
         else:
-            return f"{year}1", year  # Default to fall
+            return "Summer", year
     
     @staticmethod
-    def parse_semester(semester_code):
-        """Parse semester code like '20261' to year and semester"""
-        year = int(semester_code[:4])
-        semester_num = int(semester_code[4:])
-        semester_name = "Fall" if semester_num == 1 else "Spring"
-        return year, semester_name
+    def grade_to_points(grade):
+        """Convert letter grade to grade points"""
+        grade_map = {
+            'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+            'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+            'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+            'D+': 1.3, 'D': 1.0, 'D-': 0.7,
+            'F': 0.0
+        }
+        return grade_map.get(grade, 0.0)
     
     @staticmethod
-    def get_semester_timeline(student_id):
-        """Get student's complete academic timeline"""
+    def get_available_sections(student_id=None):
+        """Get all available course sections for enrollment"""
+        db = Database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        current_semester, current_year = Utils.get_current_semester()
+        
+        cursor.execute('''
+            SELECT cs.id, c.course_code, c.title, c.description, c.credits, 
+                   cs.section_number, cs.schedule, cs.room, cs.current_enrollment, 
+                   cs.max_capacity, u.first_name, u.last_name
+            FROM course_sections cs
+            JOIN courses c ON cs.course_id = c.id
+            JOIN professors p ON cs.professor_id = p.user_id
+            JOIN users u ON p.user_id = u.id
+            WHERE cs.status = 'open' AND cs.semester = %s AND cs.year = %s
+            ORDER BY c.course_code, cs.section_number
+        ''', (current_semester, current_year))
+        
+        sections = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in sections]
+    
+    @staticmethod
+    def get_student_enrollments(student_id, section_id):
+        """Check if student is enrolled in a specific section"""
         db = Database()
         conn = db.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT DISTINCT cs.semester, cs.year, 
-                   COUNT(e.id) as course_count,
-                   SUM(c.credits) as total_credits,
-                   AVG(e.grade_points) as semester_gpa
-            FROM enrollments e
-            JOIN course_sections cs ON e.section_id = cs.id
-            JOIN courses c ON cs.course_id = c.id
-            WHERE e.student_id = ? AND e.status = 'enrolled'
-            GROUP BY cs.semester, cs.year
-            ORDER BY cs.year, cs.semester
-        ''', (student_id,))
+            SELECT * FROM enrollments 
+            WHERE student_id = %s AND section_id = %s AND status = 'enrolled'
+        ''', (student_id, section_id))
         
-        timeline = cursor.fetchall()
+        enrollment = cursor.fetchone()
         conn.close()
-        return timeline
+        
+        return dict(enrollment) if enrollment else None

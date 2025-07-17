@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Professor Profile - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>👨‍🏫 Professor {{ professor.first_name }} {{ professor.last_name }}</h2>
+    <p class="text-muted">{{ professor.position }}, {{ professor.department }}</p>
+</div>
+
+<div class="card">
+    <h3>📋 Contact Information</h3>
+    <div class="table-container">
+        <table>
+            <tr>
+                <td><strong>Email:</strong></td>
+                <td><a href="mailto:{{ professor.email }}">{{ professor.email }}</a></td>
+            </tr>
+            <tr>
+                <td><strong>Office:</strong></td>
+                <td>{{ professor.office_location or 'Not specified' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Phone:</strong></td>
+                <td>{{ professor.phone or 'Not available' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Department:</strong></td>
+                <td>{{ professor.department }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>📚 Currently Teaching</h3>
+    {% set current_sections = sections|selectattr('semester', 'equalto', 'Fall')|list %}
+    
+    {% if current_sections %}
+        <div class="schedule-grid">
+            {% for section in current_sections %}
+            <div class="schedule-item">
+                <div class="course-code">{{ section.course_code }} - Section {{ section.section_number }}</div>
+                <div class="course-title">{{ section.title }}</div>
+                <div class="course-details">
+                    <p>⏰ {{ section.schedule }}</p>
+                    <p>📍 {{ section.room or 'Room TBA' }}</p>
+                    <p>👥 {{ section.current_enrollment }}/{{ section.max_capacity }} enrolled</p>
+                    <p>💳 {{ section.credits }} credits</p>
+                </div>
+                {% if not is_public and session.user_type == 'student' %}
+                    {% if section.current_enrollment < section.max_capacity %}
+                        <a href="{{ url_for('enroll_in_course', section_id=section.id) }}" 
+                           class="btn btn-primary" style="margin-top: 1rem;">
+                            Enroll in this Section
+                        </a>
+                    {% else %}
+                        <span class="text-muted">Section Full</span>
+                    {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-muted">Not teaching any courses this semester.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Teaching History</h3>
+    {% if sections %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Course</th>
+                        <th>Section</th>
+                        <th>Semester</th>
+                        <th>Students</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for section in sections|sort(attribute='year', reverse=True) %}
+                    <tr>
+                        <td><strong>{{ section.course_code }}</strong> - {{ section.title }}</td>
+                        <td>{{ section.section_number }}</td>
+                        <td>{{ section.semester }} {{ section.year }}</td>
+                        <td>{{ section.current_enrollment }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted">No teaching history available.</p>
+    {% endif %}
+</div>
+
+{% if not is_public %}
+<div class="text-center">
+    <a href="{{ url_for('professor_dashboard') }}" class="btn btn-secondary">
+        ← Back to Dashboard
+    </a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Search Professors - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔍 Search Professors</h2>
+    <p class="text-muted">Browse our faculty directory and view professor profiles</p>
+</div>
+
+<div class="card">
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search by name, department, or email..." 
+               class="search-input" onkeyup="filterProfessors()">
+    </div>
+</div>
+
+<div class="card">
+    <h3>👨‍🏫 Faculty Directory</h3>
+    <div class="professor-grid" id="professorGrid">
+        {% for professor in professors %}
+        <div class="professor-card" data-name="{{ professor.first_name }} {{ professor.last_name }}" 
+             data-department="{{ professor.department }}" data-email="{{ professor.email }}">
+            <div class="professor-header">
+                <h4>{{ professor.first_name }} {{ professor.last_name }}</h4>
+                <span class="position-badge">{{ professor.position }}</span>
+            </div>
+            
+            <div class="professor-info">
+                <p><strong>📚 Department:</strong> {{ professor.department }}</p>
+                <p><strong>📧 Email:</strong> <a href="mailto:{{ professor.email }}">{{ professor.email }}</a></p>
+                <p><strong>📍 Office:</strong> {{ professor.office_location or 'Not specified' }}</p>
+                <p><strong>📞 Phone:</strong> {{ professor.phone or 'Not available' }}</p>
+            </div>
+            
+            <div class="professor-actions">
+                <a href="{{ url_for('view_professor', professor_id=professor.id) }}" 
+                   class="btn btn-primary">
+                    View Full Profile
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if not professors %}
+        <p class="text-muted text-center">No professors found in the system.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Faculty Statistics</h3>
+    <div class="stats-grid">
+        {% set departments = professors|map(attribute='department')|unique|list %}
+        <div class="stat-card">
+            <div class="stat-number">{{ professors|length }}</div>
+            <div class="stat-label">Total Faculty</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ departments|length }}</div>
+            <div class="stat-label">Departments</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ professors|selectattr('position', 'equalto', 'Professor')|list|length }}</div>
+            <div class="stat-label">Full Professors</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number">{{ professors|selectattr('position', 'equalto', 'Assistant Professor')|list|length }}</div>
+            <div class="stat-label">Assistant Professors</div>
+        </div>
+    </div>
+</div>
+
+<style>
+.search-bar {
+    margin-bottom: 2rem;
+}
+
+.search-input {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.professor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 2rem;
+}
+
+.professor-card {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.professor-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.professor-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+}
+
+.professor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.professor-header h4 {
+    margin: 0;
+    color: #2d3748;
+    font-size: 1.2rem;
+}
+
+.position-badge {
+    background: #e2e8f0;
+    color: #4a5568;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.professor-info p {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: #4a5568;
+}
+
+.professor-actions {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.professor-card.hidden {
+    display: none;
+}
+
+/* Department colors for visual distinction */
+.professor-card[data-department*="Computer"] .position-badge {
+    background: #bee3f8;
+    color: #1a365d;
+}
+
+.professor-card[data-department*="Math"] .position-badge {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.professor-card[data-department*="Engineering"] .position-badge {
+    background: #fed7d7;
+    color: #822727;
+}
+
+.professor-card[data-department*="Business"] .position-badge {
+    background: #fefcbf;
+    color: #744210;
+}
+</style>
+
+<script>
+function filterProfessors() {
+    const searchInput = document.getElementById('searchInput').value.toLowerCase();
+    const professorCards = document.querySelectorAll('.professor-card');
+    
+    professorCards.forEach(card => {
+        const name = card.getAttribute('data-name').toLowerCase();
+        const department = card.getAttribute('data-department').toLowerCase();
+        const email = card.getAttribute('data-email').toLowerCase();
+        
+        if (name.includes(searchInput) || 
+            department.includes(searchInput) || 
+            email.includes(searchInput)) {
+            card.classList.remove('hidden');
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+    
+    // Update visible count
+    const visibleCards = document.querySelectorAll('.professor-card:not(.hidden)');
+    if (visibleCards.length === 0) {
+        const grid = document.getElementById('professorGrid');
+        if (!document.getElementById('noResults')) {
+            const noResults = document.createElement('p');
+            noResults.id = 'noResults';
+            noResults.className = 'text-muted text-center';
+            noResults.textContent = 'No professors found matching your search.';
+            grid.appendChild(noResults);
+        }
+    } else {
+        const noResults = document.getElementById('noResults');
+        if (noResults) {
+            noResults.remove();
+        }
+    }
+}
+</script>
+{% endblock %}

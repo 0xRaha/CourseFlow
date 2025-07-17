@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Create Course Section - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>➕ Create Course Section</h2>
+    <p class="text-muted">Create a new section for an existing course</p>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="course_id">Select Course</label>
+            <select id="course_id" name="course_id" required>
+                <option value="">Choose a course...</option>
+                {% for course in courses %}
+                <option value="{{ course.id }}">
+                    {{ course.course_code }} - {{ course.title }} ({{ course.credits }} credits)
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="section_number">Section Number</label>
+            <input type="text" id="section_number" name="section_number" required 
+                   placeholder="e.g., 001, 002, A, B">
+            <small class="text-muted">Unique identifier for this section</small>
+        </div>
+
+        <div class="form-group">
+            <label for="semester">Semester</label>
+            <select id="semester" name="semester" required>
+                <option value="Spring">Spring</option>
+                <option value="Summer">Summer</option>
+                <option value="Fall" selected>Fall</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="year">Year</label>
+            <select id="year" name="year" required>
+                {% for i in range(5) %}
+                <option value="{{ current_year + i }}" {% if i == 0 %}selected{% endif %}>
+                    {{ current_year + i }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="schedule">Schedule</label>
+            <input type="text" id="schedule" name="schedule" required 
+                   placeholder="e.g., MWF 10:00-11:00, TR 14:00-15:30">
+            <small class="text-muted">Days: M=Monday, T=Tuesday, W=Wednesday, R=Thursday, F=Friday</small>
+        </div>
+
+        <div class="form-group">
+            <label for="room">Room</label>
+            <input type="text" id="room" name="room" 
+                   placeholder="e.g., Building A Room 101">
+        </div>
+
+        <div class="form-group">
+            <label for="max_capacity">Maximum Capacity</label>
+            <input type="number" id="max_capacity" name="max_capacity" 
+                   min="1" max="500" value="30" required>
+            <small class="text-muted">Maximum number of students that can enroll</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            ✓ Create Section
+        </button>
+        <a href="{{ url_for('professor_dashboard') }}" class="btn btn-secondary">
+            Cancel
+        </a>
+    </form>
+</div>
+
+<div class="card">
+    <h3>📋 Schedule Format Guide</h3>
+    <div class="mb-2">
+        <p><strong>Days:</strong></p>
+        <ul style="margin-left: 2rem;">
+            <li>M = Monday</li>
+            <li>T = Tuesday</li>
+            <li>W = Wednesday</li>
+            <li>R = Thursday</li>
+            <li>F = Friday</li>
+        </ul>
+    </div>
+    <div>
+        <p><strong>Examples:</strong></p>
+        <ul style="margin-left: 2rem;">
+            <li>MWF 10:00-11:00 (Monday, Wednesday, Friday from 10 AM to 11 AM)</li>
+            <li>TR 14:00-15:30 (Tuesday, Thursday from 2 PM to 3:30 PM)</li>
+            <li>MW 18:00-19:15 (Monday, Wednesday from 6 PM to 7:15 PM)</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

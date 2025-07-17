@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Students - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>👥 Manage Students</h2>
+    <p class="text-muted">View and modify student enrollments and grades</p>
+</div>
+
+<div class="card">
+    <h3>📋 All Students</h3>
+    {% if students %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Major</th>
+                        <th>Year</th>
+                        <th>GPA</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td><strong>{{ student.student_id }}</strong></td>
+                        <td>{{ student.last_name }}, {{ student.first_name }}</td>
+                        <td>{{ student.email }}</td>
+                        <td>{{ student.major or 'Undeclared' }}</td>
+                        <td>Year {{ student.year_level }}</td>
+                        <td>{{ "%.2f"|format(student.gpa) }}</td>
+                        <td>
+                            <span class="text-success">{{ student.status|capitalize }}</span>
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary" style="font-size: 0.8rem;"
+                                    onclick="openStudentModal('{{ student.id }}', '{{ student.first_name }} {{ student.last_name }}')">
+                                ✏️ Edit Enrollments
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted text-center">No students registered yet.</p>
+    {% endif %}
+</div>
+
+<!-- Modal for editing student enrollments -->
+<div id="studentModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Student Enrollments</h3>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <h4 id="studentName"></h4>
+            
+            <div class="mb-3">
+                <h5>Add Past Enrollment</h5>
+                <div class="form-row">
+                    <select id="sectionSelect" class="form-control">
+                        <option value="">Select a course section...</option>
+                        {% for section in sections %}
+                        <option value="{{ section.id }}">
+                            {{ section.course_code }} - {{ section.title }} 
+                            ({{ section.semester }} {{ section.year }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <select id="gradeSelect" class="form-control">
+                        <option value="">Select grade...</option>
+                        <option value="A+">A+</option>
+                        <option value="A">A</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B">B</option>
+                        <option value="B-">B-</option>
+                        <option value="C+">C+</option>
+                        <option value="C">C</option>
+                        <option value="C-">C-</option>
+                        <option value="D+">D+</option>
+                        <option value="D">D</option>
+                        <option value="D-">D-</option>
+                        <option value="F">F</option>
+                        <option value="IP">In Progress</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="addEnrollment()">
+                        ➕ Add Enrollment
+                    </button>
+                </div>
+            </div>
+            
+            <div id="enrollmentsList">
+                <!-- Enrollments will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-body {
+    padding: 2rem;
+}
+
+.close {
+    font-size: 2rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: #718096;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #2d3748;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.form-control {
+    flex: 1;
+    padding: 0.75rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.enrollment-item {
+    background: #f7fafc;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.enrollment-item:hover {
+    background: #e2e8f0;
+}
+
+.grade-input {
+    width: 80px;
+    padding: 0.4rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+}
+</style>
+
+<script>
+let currentStudentId = null;
+
+function openStudentModal(studentId, studentName) {
+    currentStudentId = studentId;
+    document.getElementById('studentName').textContent = studentName;
+    document.getElementById('studentModal').style.display = 'flex';
+    loadStudentEnrollments(studentId);
+}
+
+function closeModal() {
+    document.getElementById('studentModal').style.display = 'none';
+    currentStudentId = null;
+}
+
+function loadStudentEnrollments(studentId) {
+    // In a real application, this would make an AJAX call to get the student's enrollments
+    // For now, we'll just show a loading message
+    document.getElementById('enrollmentsList').innerHTML = '<p class="text-muted">Loading enrollments...</p>';
+}
+
+function addEnrollment() {
+    const sectionId = document.getElementById('sectionSelect').value;
+    const grade = document.getElementById('gradeSelect').value;
+    
+    if (!sectionId || !grade) {
+        alert('Please select both a section and a grade');
+        return;
+    }
+    
+    fetch('/admin/edit_enrollment', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'add',
+            student_id: currentStudentId,
+            section_id: sectionId,
+            grade: grade
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Enrollment added successfully!');
+            loadStudentEnrollments(currentStudentId);
+            document.getElementById('sectionSelect').value = '';
+            document.getElementById('gradeSelect').value = '';
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error adding enrollment: ' + error);
+    });
+}
+
+function removeEnrollment(studentId, sectionId) {
+    if (!confirm('Are you sure you want to remove this enrollment?')) {
+        return;
+    }
+    
+    fetch('/admin/edit_enrollment', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'remove',
+            student_id: studentId,
+            section_id: sectionId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Enrollment removed successfully!');
+            loadStudentEnrollments(currentStudentId);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error removing enrollment: ' + error);
+    });
+}
+
+function changeGrade(studentId, sectionId, newGrade) {
+    fetch('/admin/edit_enrollment', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'change_grade',
+            student_id: studentId,
+            section_id: sectionId,
+            grade: newGrade
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Grade updated successfully!');
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error updating grade: ' + error);
+    });
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    const modal = document.getElementById('studentModal');
+    if (event.target == modal) {
+        closeModal();
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Create Course - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>➕ Create New Course</h2>
+    <p class="text-muted">Add a new course to the university catalog</p>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="course_code">Course Code</label>
+            <input type="text" id="course_code" name="course_code" required 
+                   placeholder="e.g., CS101, MATH200" pattern="[A-Z]{2,4}[0-9]{3,4}">
+            <small class="text-muted">Unique identifier for the course (2-4 letters + 3-4 numbers)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="title">Course Title</label>
+            <input type="text" id="title" name="title" required 
+                   placeholder="e.g., Introduction to Computer Science">
+            <small class="text-muted">Full name of the course</small>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" required
+                      placeholder="Provide a detailed description of the course content, objectives, and learning outcomes..."></textarea>
+            <small class="text-muted">This will be visible to students when browsing courses</small>
+        </div>
+
+        <div class="form-group">
+            <label for="credits">Credits</label>
+            <select id="credits" name="credits" required>
+                <option value="">Select credits...</option>
+                <option value="1">1 Credit</option>
+                <option value="2">2 Credits</option>
+                <option value="3" selected>3 Credits</option>
+                <option value="4">4 Credits</option>
+                <option value="5">5 Credits</option>
+                <option value="6">6 Credits</option>
+            </select>
+            <small class="text-muted">Number of credit hours for this course</small>
+        </div>
+
+        <div class="form-group">
+            <label for="max_students">Maximum Students per Section</label>
+            <input type="number" id="max_students" name="max_students" 
+                   min="5" max="500" value="30" required>
+            <small class="text-muted">Default capacity for course sections</small>
+        </div>
+
+        <div class="form-group">
+            <label for="prerequisites">Prerequisites (Optional)</label>
+            <div id="prerequisitesList">
+                <div class="prerequisite-input">
+                    <input type="text" name="prerequisites[]" placeholder="e.g., MATH101">
+                    <button type="button" class="btn btn-secondary" onclick="addPrerequisite()">
+                        ➕ Add Another
+                    </button>
+                </div>
+            </div>
+            <small class="text-muted">List course codes that students must complete before enrolling</small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                ✓ Create Course
+            </button>
+            <a href="{{ url_for('manage_courses') }}" class="btn btn-secondary">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>📋 Course Creation Guidelines</h3>
+    <div class="guidelines">
+        <h4>Course Code Format:</h4>
+        <p>Course codes should follow the standard format of department abbreviation (2-4 letters) followed by course number (3-4 digits).</p>
+        <ul style="margin-left: 2rem;">
+            <li><strong>CS101</strong> - Computer Science, introductory level</li>
+            <li><strong>MATH200</strong> - Mathematics, intermediate level</li>
+            <li><strong>ENG301</strong> - English, advanced level</li>
+            <li><strong>BUS400</strong> - Business, senior level</li>
+        </ul>
+        
+        <h4 style="margin-top: 1.5rem;">Credit Hours:</h4>
+        <p>Most courses are 3-4 credits. Consider:</p>
+        <ul style="margin-left: 2rem;">
+            <li>1-2 credits: Lab courses, seminars, or partial courses</li>
+            <li>3-4 credits: Standard lecture courses</li>
+            <li>5-6 credits: Intensive courses with lab components</li>
+        </ul>
+        
+        <h4 style="margin-top: 1.5rem;">Prerequisites:</h4>
+        <p>Prerequisites ensure students have the necessary foundation. Common patterns:</p>
+        <ul style="margin-left: 2rem;">
+            <li>Sequential courses (CS101 → CS102 → CS201)</li>
+            <li>Foundation requirements (MATH101 for engineering courses)</li>
+            <li>Skill prerequisites (writing courses for advanced literature)</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.form-actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.prerequisite-input {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.prerequisite-input input {
+    flex: 1;
+}
+
+.guidelines {
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.guidelines h4 {
+    color: #2d3748;
+    margin-bottom: 0.5rem;
+}
+
+.guidelines ul {
+    margin-bottom: 1rem;
+}
+
+.guidelines li {
+    margin-bottom: 0.25rem;
+}
+</style>
+
+<script>
+function addPrerequisite() {
+    const container = document.getElementById('prerequisitesList');
+    const newInput = document.createElement('div');
+    newInput.className = 'prerequisite-input';
+    newInput.innerHTML = `
+        <input type="text" name="prerequisites[]" placeholder="e.g., MATH101">
+        <button type="button" class="btn btn-danger" onclick="removePrerequisite(this)">
+            ✗ Remove
+        </button>
+    `;
+    container.appendChild(newInput);
+}
+
+function removePrerequisite(button) {
+    button.parentElement.remove();
+}
+
+// Validate course code format
+document.getElementById('course_code').addEventListener('input', function(e) {
+    const value = e.target.value.toUpperCase();
+    e.target.value = value;
+    
+    const pattern = /^[A-Z]{2,4}[0-9]{3,4}$/;
+    if (value && !pattern.test(value)) {
+        e.target.setCustomValidity('Course code must be 2-4 letters followed by 3-4 numbers');
+    } else {
+        e.target.setCustomValidity('');
+    }
+});
+</script>
+{% endblock %}

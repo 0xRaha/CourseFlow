@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Professor Dashboard - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>👨‍🏫 Professor Dashboard</h2>
+    <p class="text-muted">Welcome, Professor {{ professor.first_name }} {{ professor.last_name }}</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ sections|length }}</div>
+        <div class="stat-label">Teaching Sections</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ sections|sum(attribute='current_enrollment') }}</div>
+        <div class="stat-label">Total Students</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ professor.department }}</div>
+        <div class="stat-label">Department</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ professor.position }}</div>
+        <div class="stat-label">Position</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>👤 My Information</h3>
+    <div class="table-container">
+        <table>
+            <tr>
+                <td><strong>Employee ID:</strong></td>
+                <td>{{ professor.employee_id }}</td>
+            </tr>
+            <tr>
+                <td><strong>Email:</strong></td>
+                <td>{{ professor.email }}</td>
+            </tr>
+            <tr>
+                <td><strong>Office:</strong></td>
+                <td>{{ professor.office_location or 'Not assigned' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Phone:</strong></td>
+                <td>{{ professor.phone or 'Not provided' }}</td>
+            </tr>
+        </table>
+    </div>
+    <a href="{{ url_for('professor_profile') }}" class="btn btn-secondary mt-2">
+        View My Public Profile
+    </a>
+</div>
+
+<div class="card">
+    <h3>📚 My Course Sections</h3>
+    <a href="{{ url_for('create_section') }}" class="btn btn-primary mb-2">
+        ➕ Create New Section
+    </a>
+    
+    {% if sections %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Course Code</th>
+                        <th>Title</th>
+                        <th>Section</th>
+                        <th>Schedule</th>
+                        <th>Room</th>
+                        <th>Enrollment</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for section in sections %}
+                    <tr>
+                        <td><strong>{{ section.course_code }}</strong></td>
+                        <td>{{ section.title }}</td>
+                        <td>{{ section.section_number }}</td>
+                        <td>{{ section.schedule }}</td>
+                        <td>{{ section.room or 'TBA' }}</td>
+                        <td>{{ section.current_enrollment }}/{{ section.max_capacity }}</td>
+                        <td>
+                            {% if section.semester_ended %}
+                                <span class="text-muted">Ended</span>
+                            {% elif section.grades_submitted %}
+                                <span class="text-success">✓ Grades Submitted</span>
+                            {% else %}
+                                <span class="text-success">✓ Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('view_section', section_id=section.id) }}" 
+                               class="btn btn-secondary" style="font-size: 0.8rem;">
+                                👁️ View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="text-center">
+            <p class="text-muted">You haven't created any course sections yet.</p>
+            <a href="{{ url_for('create_section') }}" class="btn btn-primary">
+                ➕ Create Your First Section
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Teaching Statistics</h3>
+    <div class="schedule-grid">
+        {% for section in sections %}
+        <div class="schedule-item">
+            <div class="course-code">{{ section.course_code }} - Section {{ section.section_number }}</div>
+            <div class="course-title">{{ section.title }}</div>
+            <div class="course-details">
+                <p>📅 {{ section.semester }} {{ section.year }}</p>
+                <p>👥 {{ section.current_enrollment }} students enrolled</p>
+                <p>📍 {{ section.room or 'Room TBA' }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
