@@ -32,22 +32,16 @@ A simple yet comprehensive full-stack web application for managing university op
 
 - **Backend**: Python Flask
 - **Database**: PostgreSQL
-- **Frontend**: HTML, CSS, JavaScript (Vanilla)
+- **Frontend**: HTML, CSS
 - **Authentication**: Flask Sessions with password hashing
 - **Styling**: Custom CSS with gradient design
-
-## 📋 Prerequisites
-
-- Python 3.8+
-- PostgreSQL 12+
-- pip (Python package manager)
 
 ## 🚀 Setup Instructions
 
 ### 1. Clone the Repository
 ```bash
 git clone <repository-url>
-cd university-management-system
+cd CourseFlow
 ```
 
 ### 2. Create Virtual Environment
@@ -179,15 +173,3 @@ university-management-system/
 - Error handling is simplified for educational clarity
 - No production security measures implemented
 - File uploads and advanced features are not included
-
-## 🤝 Contributing
-
-This is an educational project. Feel free to fork and enhance it for your own learning purposes.
-
-## 📄 License
-
-This project is created for educational purposes. Use it as a reference for learning full-stack web development.
-
----
-
-**Happy Learning! 🎓**
