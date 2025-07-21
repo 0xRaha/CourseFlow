@@ -53,7 +53,7 @@
 
         .nav-links {
             display: flex;
-            gap: 2rem;
+            gap: 1.5rem;
             list-style: none;
         }
 
@@ -63,6 +63,7 @@
             padding: 0.5rem 1rem;
             border-radius: 8px;
             transition: all 0.3s ease;
+            font-size: 0.9rem;
         }
 
         .nav-links a:hover {
@@ -335,7 +336,8 @@
             }
 
             .nav-links {
-                flex-direction: column;
+                flex-wrap: wrap;
+                justify-content: center;
                 gap: 0.5rem;
             }
 
@@ -396,13 +398,17 @@
                     {% if session.user_type == 'admin' %}
                         <li><a href="{{ url_for('register_user') }}">Register User</a></li>
                         <li><a href="{{ url_for('manage_courses') }}">Manage Courses</a></li>
+                        <li><a href="{{ url_for('manage_students') }}">Manage Students</a></li>
                     {% elif session.user_type == 'professor' %}
                         <li><a href="{{ url_for('create_section') }}">Create Section</a></li>
+                        <li><a href="{{ url_for('professor_profile') }}">My Profile</a></li>
                     {% elif session.user_type == 'student' %}
                         <li><a href="{{ url_for('browse_courses') }}">Browse Courses</a></li>
                         <li><a href="{{ url_for('view_grades') }}">My Grades</a></li>
                         <li><a href="{{ url_for('view_schedule') }}">Schedule</a></li>
                     {% endif %}
+                    <li><a href="{{ url_for('search_professors') }}">Faculty</a></li>
+                    <li><a href="{{ url_for('edit_profile') }}">Edit Profile</a></li>
                     <li><a href="{{ url_for('logout') }}">Logout</a></li>
                 </ul>
             </nav>

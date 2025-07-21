@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Create Announcement - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📢 Create Course Announcement</h2>
+    <p class="text-muted">Post an announcement for your students to see</p>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="title">Announcement Title</label>
+            <input type="text" id="title" name="title" required 
+                   placeholder="e.g., Exam Schedule Update, Assignment Reminder">
+        </div>
+
+        <div class="form-group">
+            <label for="content">Content</label>
+            <textarea id="content" name="content" rows="6" required
+                      placeholder="Write your announcement content here..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            📢 Post Announcement
+        </button>
+        <a href="{{ url_for('view_section', section_id=section_id) }}" class="btn btn-secondary">
+            Cancel
+        </a>
+    </form>
+</div>
+
+<div class="card">
+    <h3>💡 Announcement Tips</h3>
+    <ul style="margin-left: 2rem; color: #4a5568;">
+        <li>Keep announcements clear and concise</li>
+        <li>Include important dates and deadlines</li>
+        <li>Students will see this on their dashboard</li>
+        <li>Use professional language appropriate for academic communication</li>
+    </ul>
+</div>
+{% endblock %}

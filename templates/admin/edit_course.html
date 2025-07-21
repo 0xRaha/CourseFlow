@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Course - University System{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>✏️ Edit Course</h2>
+    <p class="text-muted">Update course information</p>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="course_code">Course Code</label>
+            <input type="text" id="course_code" name="course_code" value="{{ course.course_code }}" required 
+                   pattern="[A-Z]{2,4}[0-9]{3,4}">
+            <small class="text-muted">Unique identifier for the course (2-4 letters + 3-4 numbers)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="title">Course Title</label>
+            <input type="text" id="title" name="title" value="{{ course.title }}" required>
+            <small class="text-muted">Full name of the course</small>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" required>{{ course.description }}</textarea>
+            <small class="text-muted">This will be visible to students when browsing courses</small>
+        </div>
+
+        <div class="form-group">
+            <label for="credits">Credits</label>
+            <select id="credits" name="credits" required>
+                <option value="">Select credits...</option>
+                <option value="1" {% if course.credits == 1 %}selected{% endif %}>1 Credit</option>
+                <option value="2" {% if course.credits == 2 %}selected{% endif %}>2 Credits</option>
+                <option value="3" {% if course.credits == 3 %}selected{% endif %}>3 Credits</option>
+                <option value="4" {% if course.credits == 4 %}selected{% endif %}>4 Credits</option>
+                <option value="5" {% if course.credits == 5 %}selected{% endif %}>5 Credits</option>
+                <option value="6" {% if course.credits == 6 %}selected{% endif %}>6 Credits</option>
+            </select>
+            <small class="text-muted">Number of credit hours for this course</small>
+        </div>
+
+        <div class="form-group">
+            <label for="department">Department</label>
+            <input type="text" id="department" name="department" value="{{ course.department or '' }}" 
+                   placeholder="e.g., Computer Science">
+            <small class="text-muted">Department offering this course</small>
+        </div>
+
+        <div class="form-group">
+            <label for="max_students">Maximum Students per Section</label>
+            <input type="number" id="max_students" name="max_students" value="{{ course.max_students }}"
+                   min="5" max="500" required>
+            <small class="text-muted">Default capacity for course sections</small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                ✓ Update Course
+            </button>
+            <a href="{{ url_for('manage_courses') }}" class="btn btn-secondary">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+}
+</style>
+
+<script>
+// Validate course code format
+document.getElementById('course_code').addEventListener('input', function(e) {
+    const value = e.target.value.toUpperCase();
+    e.target.value = value;
+    
+    const pattern = /^[A-Z]{2,4}[0-9]{3,4}$/;
+    if (value && !pattern.test(value)) {
+        e.target.setCustomValidity('Course code must be 2-4 letters followed by 3-4 numbers');
+    } else {
+        e.target.setCustomValidity('');
+    }
+});
+</script>
+{% endblock %}

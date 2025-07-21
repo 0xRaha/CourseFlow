@@ -9,7 +9,32 @@
 </div>
 
 <div class="card">
+    <h3>🔎 Search & Filter</h3>
+    <form method="GET" class="search-form">
+        <div class="form-row">
+            <div class="form-group">
+                <input type="text" name="search" placeholder="Search by course code or title..." 
+                       value="{{ search }}" class="search-input">
+            </div>
+            <div class="form-group">
+                <select name="department" class="department-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}" {% if dept == selected_department %}selected{% endif %}>
+                        {{ dept }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Search</button>
+            <a href="{{ url_for('browse_courses') }}" class="btn btn-secondary">Clear</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
     {% if sections %}
+        <p class="text-muted">{{ sections|length }} course section(s) found</p>
         <div class="course-grid">
             {% for section in sections %}
             <div class="course-card {% if section.is_enrolled %}enrolled{% endif %}">
@@ -19,6 +44,9 @@
                 </div>
                 
                 <h5>{{ section.title }}</h5>
+                {% if section.department %}
+                <p class="department-label"><strong>Department:</strong> {{ section.department }}</p>
+                {% endif %}
                 <p class="course-description">{{ section.description|truncate(150) }}</p>
                 
                 <div class="course-info">
@@ -33,9 +61,6 @@
                             <span class="text-danger">(FULL)</span>
                         {% endif %}
                     </p>
-                    {% if section.average_rating %}
-                    <p><strong>⭐ Rating:</strong> {{ "%.1f"|format(section.average_rating) }}/5.0</p>
-                    {% endif %}
                 </div>
                 
                 <div class="course-actions">
@@ -60,12 +85,40 @@
         </div>
     {% else %}
         <div class="text-center">
-            <p class="text-muted">No courses available for enrollment at this time.</p>
+            <p class="text-muted">No courses found matching your criteria.</p>
+            {% if search or selected_department %}
+                <a href="{{ url_for('browse_courses') }}" class="btn btn-primary">Show All Courses</a>
+            {% endif %}
         </div>
     {% endif %}
 </div>
 
 <style>
+.search-form {
+    margin-bottom: 1rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.form-row .form-group {
+    flex: 1;
+    min-width: 200px;
+    margin-bottom: 0;
+}
+
+.search-input, .department-select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
 .course-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -115,6 +168,13 @@
 .course-card h5 {
     color: #4a5568;
     margin-bottom: 0.75rem;
+}
+
+.department-label {
+    color: #667eea;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
 }
 
 .course-description {

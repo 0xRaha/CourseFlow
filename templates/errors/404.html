@@ -1,0 +1,135 @@
+<!-- templates/errors/404.html -->
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - University System{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <div class="error-icon">
+            <h1>404</h1>
+        </div>
+        <div class="error-content">
+            <h2>Page Not Found</h2>
+            <p>Sorry, the page you are looking for doesn't exist or has been moved.</p>
+            <div class="error-actions">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    🏠 Go Home
+                </a>
+                <a href="javascript:history.back()" class="btn btn-secondary">
+                    ← Go Back
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+}
+
+.error-card {
+    text-align: center;
+    max-width: 500px;
+}
+
+.error-icon h1 {
+    font-size: 8rem;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+}
+
+.error-content h2 {
+    font-size: 2rem;
+    color: #2d3748;
+    margin-bottom: 1rem;
+}
+
+.error-content p {
+    font-size: 1.1rem;
+    color: #4a5568;
+    margin-bottom: 2rem;
+}
+
+.error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+</style>
+{% endblock %}
+
+<!-- templates/errors/500.html -->
+{% extends "base.html" %}
+
+{% block title %}Server Error - University System{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <div class="error-icon">
+            <h1>500</h1>
+        </div>
+        <div class="error-content">
+            <h2>Server Error</h2>
+            <p>Something went wrong on our end. Our team has been notified and is working on it.</p>
+            <div class="error-actions">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    🏠 Go Home
+                </a>
+                <a href="javascript:history.back()" class="btn btn-secondary">
+                    ← Go Back
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+}
+
+.error-card {
+    text-align: center;
+    max-width: 500px;
+}
+
+.error-icon h1 {
+    font-size: 8rem;
+    font-weight: bold;
+    color: #e53e3e;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+}
+
+.error-content h2 {
+    font-size: 2rem;
+    color: #2d3748;
+    margin-bottom: 1rem;
+}
+
+.error-content p {
+    font-size: 1.1rem;
+    color: #4a5568;
+    margin-bottom: 2rem;
+}
+
+.error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+</style>
+{% endblock %}

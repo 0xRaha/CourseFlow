@@ -30,6 +30,24 @@
     </div>
 </div>
 
+{% if announcements %}
+<div class="card">
+    <h3>📢 Recent Announcements</h3>
+    <div class="announcements-list">
+        {% for announcement in announcements %}
+        <div class="announcement-item">
+            <div class="announcement-header">
+                <h4>{{ announcement.title }}</h4>
+                <span class="course-badge">{{ announcement.course_code }}</span>
+            </div>
+            <p>{{ announcement.content }}</p>
+            <small class="text-muted">Posted recently in {{ announcement.course_title }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <h3>👤 My Information</h3>
     <div class="table-container">
@@ -113,6 +131,9 @@
         <a href="{{ url_for('view_schedule') }}" class="btn btn-primary">
             📅 View Schedule
         </a>
+        <a href="{{ url_for('edit_profile') }}" class="btn btn-secondary">
+            ✏️ Edit Profile
+        </a>
     </div>
 </div>
 
@@ -154,6 +175,46 @@
 
 .progress-info p {
     margin-bottom: 0.5rem;
+}
+
+.announcements-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.announcement-item {
+    background: #f7fafc;
+    border-left: 4px solid #667eea;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+}
+
+.announcement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.announcement-header h4 {
+    margin: 0;
+    color: #2d3748;
+}
+
+.course-badge {
+    background: #667eea;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.announcement-item p {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
 }
 </style>
 {% endblock %}
